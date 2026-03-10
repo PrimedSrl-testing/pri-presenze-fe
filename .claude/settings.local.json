@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /c/Users/l.colucci/Documents/Alberto/primed-hr/src/app/\\\\\\(dashboard\\\\\\)/)",
+      "Bash(cd \"/c/Users/l.colucci/Documents/Alberto/primed-hr\" && npx tsc --noEmit 2>&1 | head -60)",
+      "Bash(cd \"/c/Users/l.colucci/Documents/Alberto/primed-hr\" && npx tsc --noEmit 2>&1)",
+      "Bash(cd \"/c/Users/l.colucci/Documents/Alberto/primed-hr\" && npm run build 2>&1 | tail -30)",
+      "Bash(cd \"/c/Users/l.colucci/Documents/Alberto/primed-hr\" && npm run build 2>&1 | grep -E \"audit|basket|area/\")",
+      "Bash(cd C:/Users/l.colucci/Documents/Alberto/primed-hr && npx next build 2>&1 | tail -20)"
+    ]
+  }
+}
