@@ -3,6 +3,7 @@
 import { Header } from "@/components/layout/Header";
 import { useHRStore } from "@/lib/store";
 import { Avatar } from "@/components/ui/Avatar";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
 import { Calendar, Wallet } from "lucide-react";
 
 // Mock basket entries
@@ -21,6 +22,19 @@ const STATO_STYLES: Record<string, string> = {
   in_banca: "wa",
 };
 
+interface BasketRow {
+  idx: number;
+  empId: string;
+  empFull: string;
+  empIni: string;
+  empCol: string;
+  tipo: string;
+  dal: string;
+  al: string;
+  giorni: number;
+  stato: string;
+}
+
 export default function BasketPage() {
   const { collaboratori } = useHRStore();
 
@@ -31,6 +45,56 @@ export default function BasketPage() {
   function getCollab(id: string) {
     return collaboratori.find((c) => c.id === id);
   }
+
+  const rows: BasketRow[] = BASKET_ROWS.map((row, i) => {
+    const c = getCollab(row.empId);
+    return {
+      idx: i,
+      empId: row.empId,
+      empFull: c?.full ?? row.empId,
+      empIni: c?.ini ?? "?",
+      empCol: c?.col ?? "#94a3b8",
+      tipo: row.tipo,
+      dal: row.dal,
+      al: row.al,
+      giorni: row.giorni,
+      stato: row.stato,
+    };
+  });
+
+  const columns: Column<BasketRow>[] = [
+    {
+      key: "dipendente",
+      label: "Dipendente",
+      getValue: (r) => r.empFull,
+      render: (r) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <Avatar ini={r.empIni} color={r.empCol} size="sm" />
+          <span className="t-main">{r.empFull}</span>
+        </div>
+      ),
+    },
+    {
+      key: "tipo",
+      label: "Tipo",
+      getValue: (r) => r.tipo,
+      render: (r) => <span style={{ textTransform: "capitalize" }}>{r.tipo}</span>,
+    },
+    { key: "dal", label: "Dal", getValue: (r) => r.dal },
+    { key: "al", label: "Al", getValue: (r) => r.al },
+    {
+      key: "giorni",
+      label: "Giorni",
+      getValue: (r) => r.giorni,
+      render: (r) => <span className="t-main">{r.giorni}g</span>,
+    },
+    {
+      key: "stato",
+      label: "Stato",
+      getValue: (r) => r.stato,
+      render: (r) => <span className={`bdg ${STATO_STYLES[r.stato] ?? "nn"}`}>{r.stato.replace("_", " ")}</span>,
+    },
+  ];
 
   return (
     <>
@@ -67,41 +131,13 @@ export default function BasketPage() {
           </div>
         </div>
 
-        <div className="tw">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Dipendente</th>
-                <th>Tipo</th>
-                <th>Dal</th>
-                <th>Al</th>
-                <th>Giorni</th>
-                <th>Stato</th>
-              </tr>
-            </thead>
-            <tbody>
-              {BASKET_ROWS.map((row, i) => {
-                const c = getCollab(row.empId);
-                return (
-                  <tr key={i}>
-                    <td>
-                      {c ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                          <Avatar ini={c.ini} color={c.col} size="sm" />
-                          <span className="t-main">{c.full}</span>
-                        </div>
-                      ) : row.empId}
-                    </td>
-                    <td><span style={{ textTransform: "capitalize" }}>{row.tipo}</span></td>
-                    <td>{row.dal}</td>
-                    <td>{row.al}</td>
-                    <td className="t-main">{row.giorni}g</td>
-                    <td><span className={`bdg ${STATO_STYLES[row.stato] ?? "nn"}`}>{row.stato.replace("_", " ")}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="card" style={{ padding: 0 }}>
+          <SortableTable<BasketRow>
+            columns={columns}
+            data={rows}
+            rowKey={(r) => r.idx}
+            emptyMessage="Nessuna assenza pianificata"
+          />
         </div>
       </div>
     </>

@@ -37,7 +37,7 @@ export function CausaliConfig() {
   function handleSave() {
     if (!form.nome.trim()) { showToast("Il nome è obbligatorio", "err"); return; }
     if (modal.data) { updateCausale(modal.data.id, form); showToast("Causale aggiornata", "ok"); }
-    else { addCausale({ ...form, id: crypto.randomUUID() }); showToast("Causale aggiunta", "ok"); }
+    else { addCausale({ ...form, id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36) }); showToast("Causale aggiunta", "ok"); }
     setModal({ open: false });
   }
 

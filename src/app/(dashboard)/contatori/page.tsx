@@ -1,118 +1,279 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
-import { useHRStore } from "@/lib/store";
-import { Avatar } from "@/components/ui/Avatar";
-import { Search } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { useToastStore } from "@/lib/store";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
+import {
+  Loader2, ArrowLeft, Calendar, Wallet, Clock,
+  PiggyBank, TrendingUp, Building2, ChevronRight,
+  Download, Upload, FileSpreadsheet, CheckCircle, AlertTriangle,
+} from "lucide-react";
 
-// Mock contatori per dipendente
-const CONTATORI: Record<string, { ferie: number; ferieUsate: number; rol: number; extra: number }> = {
-  "1": { ferie: 26, ferieUsate: 4,  rol: 32, extra: 8 },
-  "2": { ferie: 26, ferieUsate: 10, rol: 18, extra: 2 },
-  "3": { ferie: 26, ferieUsate: 8,  rol: 24, extra: 12 },
-  "4": { ferie: 22, ferieUsate: 6,  rol: 20, extra: 0 },
-  "5": { ferie: 26, ferieUsate: 14, rol: 16, extra: 4 },
-  "6": { ferie: 26, ferieUsate: 2,  rol: 28, extra: 6 },
-  "7": { ferie: 26, ferieUsate: 12, rol: 12, extra: 16 },
-};
+type Vista = "totali" | "reparti" | "dipendenti";
+
+interface TotaliData {
+  totale_ore: number;
+  ferie: { saldo: number; maturate: number; usate: number };
+  rol: { saldo: number; maturato: number; usato: number };
+  banca_ore: { saldo: number; maturata: number; usata: number };
+  bop: { saldo: number; maturato: number; usato: number };
+}
+
+interface RepartoRow {
+  reparto: string; num_dipendenti: number;
+  ferie_saldo: number; rol_saldo: number; banca_saldo: number; bop_saldo: number; totale: number;
+}
+
+interface DipRow {
+  dip_id: number; nome: string; matricola: string;
+  ferie: { maturate: number; usate: number; saldo: number };
+  rol: { maturato: number; usato: number; saldo: number };
+  banca_ore: { maturata: number; usata: number; saldo: number };
+  bop: { maturato: number; usato: number; saldo: number };
+  totale: number;
+}
+
+const CARDS = [
+  { key: "totale", label: "TOTALE GENERALE", icon: <TrendingUp size={24} />, bg: "linear-gradient(135deg, #1d2939, #475467)" },
+  { key: "ferie", label: "FERIE", icon: <Calendar size={24} />, bg: "linear-gradient(135deg, #059669, #34d399)" },
+  { key: "rol", label: "ROL", icon: <Clock size={24} />, bg: "linear-gradient(135deg, #3b82f6, #60a5fa)" },
+  { key: "banca_ore", label: "BANCA ORE", icon: <Wallet size={24} />, bg: "linear-gradient(135deg, #d97706, #fbbf24)" },
+  { key: "bop", label: "BOP SALVADANAIO", icon: <PiggyBank size={24} />, bg: "linear-gradient(135deg, #8b5cf6, #a78bfa)" },
+];
 
 export default function ContatoriPage() {
-  const { collaboratori } = useHRStore();
-  const [q, setQ] = useState("");
+  const { showToast } = useToastStore();
+  const [anno, setAnno] = useState(new Date().getFullYear());
+  const [loading, setLoading] = useState(true);
+  const [vista, setVista] = useState<Vista>("totali");
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [selectedReparto, setSelectedReparto] = useState<string | null>(null);
+  const [totali, setTotali] = useState<TotaliData | null>(null);
+  const [reparti, setReparti] = useState<RepartoRow[]>([]);
+  const [dipendenti, setDipendenti] = useState<DipRow[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ importati: number; saltati: number; errori: string[] } | null>(null);
+  const [nextImport, setNextImport] = useState<{ anno: number; mese: number } | null>(null);
+  const [importAnno, setImportAnno] = useState(new Date().getFullYear());
+  const [importMese, setImportMese] = useState(new Date().getMonth() + 1);
 
-  const list = collaboratori.filter(
-    (c) =>
-      c.attivo &&
-      (c.full.toLowerCase().includes(q.toLowerCase()) || c.dept.toLowerCase().includes(q.toLowerCase()))
-  );
+  const fetchTotali = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=totali`);
+      if (res.ok) setTotali(await res.json());
+    } catch (err: any) { showToast(err.message, "err"); }
+    finally { setLoading(false); }
+  }, [anno, showToast]);
+
+  const fetchReparti = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=reparti`);
+      if (res.ok) { const d = await res.json(); setReparti(d.reparti ?? []); }
+    } catch (err: any) { showToast(err.message, "err"); }
+    finally { setLoading(false); }
+  }, [anno, showToast]);
+
+  const fetchDipendenti = useCallback(async (reparto: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=dipendenti&reparto=${encodeURIComponent(reparto)}`);
+      if (res.ok) { const d = await res.json(); setDipendenti(d.dipendenti ?? []); }
+    } catch (err: any) { showToast(err.message, "err"); }
+    finally { setLoading(false); }
+  }, [anno, showToast]);
+
+  useEffect(() => { fetchTotali(); }, [fetchTotali]);
+
+  // Carica il prossimo mese da importare
+  useEffect(() => {
+    fetch("/api/contatori/import").then(r => r.json()).then(d => {
+      if (d.prossimo) { setNextImport(d.prossimo); setImportAnno(d.prossimo.anno); setImportMese(d.prossimo.mese); }
+    }).catch(() => {});
+  }, [importResult]);
+
+  const goReparti = (key: string) => { setSelectedCard(key); setVista("reparti"); fetchReparti(); };
+  const goDip = (rep: string) => { setSelectedReparto(rep); setVista("dipendenti"); fetchDipendenti(rep); };
+  const goBack = () => { if (vista === "dipendenti") { setVista("reparti"); } else { setVista("totali"); setSelectedCard(null); } };
+
+  const cardLabel = CARDS.find(c => c.key === selectedCard)?.label ?? "";
+
+  if (loading && !totali) return (<><Header title="Contatori" /><div className="pg" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 400 }}><Loader2 size={28} style={{ color: "var(--ac)", animation: "sp 1s linear infinite" }} /></div></>);
 
   return (
     <>
       <Header title="Contatori" />
-      <div className="pg anim-fi">
-        <div className="sh">
-          <div>
-            <div className="stit">Contatori ore</div>
-            <div className="ss">Saldi ferie, ROL e straordinari — Marzo 2026</div>
+      <div className="pg anim-fi" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* Breadcrumb + Anno */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {vista !== "totali" && <button className="icon-btn" onClick={goBack}><ArrowLeft size={16} /></button>}
+            <span style={{ fontSize: 14, color: "var(--tm)" }}>
+              {vista === "totali" && "Panoramica Generale"}
+              {vista === "reparti" && <><span style={{ fontWeight: 700, color: "var(--t)" }}>{cardLabel}</span> <ChevronRight size={12} style={{ display: "inline", verticalAlign: "middle" }} /> Per Reparto</>}
+              {vista === "dipendenti" && <><span style={{ fontWeight: 700, color: "var(--t)" }}>{cardLabel}</span> <ChevronRight size={12} style={{ display: "inline", verticalAlign: "middle" }} /> <span style={{ fontWeight: 700, color: "var(--t)" }}>{selectedReparto}</span></>}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: "var(--tm)", fontWeight: 600 }}>Visualizza anno:</span>
+            <select className="fi" style={{ width: 90 }} value={anno} onChange={(e) => { setAnno(Number(e.target.value)); setVista("totali"); setSelectedCard(null); }}>
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <div style={{ width: 1, height: 24, background: "var(--bdr)", margin: "0 4px" }} />
+            <span style={{ fontSize: 12, color: "var(--tm)", fontWeight: 600 }}>Import:</span>
+            <select className="fi" style={{ width: 70 }} value={importMese} onChange={(e) => setImportMese(Number(e.target.value))}>
+              {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{String(i + 1).padStart(2, "0")}</option>)}
+            </select>
+            <select className="fi" style={{ width: 80 }} value={importAnno} onChange={(e) => setImportAnno(Number(e.target.value))}>
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <label style={{ cursor: importing ? "not-allowed" : "pointer" }}>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px",
+                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: importing ? "not-allowed" : "pointer",
+                background: "#3b5bdb", color: "#fff", border: "none",
+              }}>
+                {importing ? <Loader2 size={13} style={{ animation: "sp 1s linear infinite" }} /> : <Upload size={13} />}
+                Importa {String(importMese).padStart(2, "0")}/{importAnno}
+              </div>
+              <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} disabled={importing} onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setImporting(true); setImportResult(null);
+                try {
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  fd.append("anno", String(importAnno));
+                  fd.append("mese", String(importMese));
+                  const res = await fetch("/api/contatori/import", { method: "POST", body: fd });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Errore import");
+                  setImportResult(data);
+                  showToast(`Importati ${data.importati} record, ${data.saltati} saltati`, data.saltati > 0 ? "info" : "ok");
+                  fetchTotali();
+                } catch (err: any) { showToast(err.message, "err"); }
+                finally { setImporting(false); e.target.value = ""; }
+              }} />
+            </label>
           </div>
         </div>
 
-        <div className="toolbar">
-          <div className="sbr" style={{ flex: 1, maxWidth: 320 }}>
-            <Search size={14} style={{ color: "var(--tm)" }} />
-            <input
-              placeholder="Cerca dipendente…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+        {/* Risultato import */}
+        {importResult && (
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", borderRadius: 10,
+            background: importResult.saltati > 0 ? "var(--wal)" : "var(--okl)",
+            border: importResult.saltati > 0 ? "1.5px solid var(--wa)" : "1.5px solid var(--ok)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {importResult.saltati > 0 ? <AlertTriangle size={16} style={{ color: "var(--wa)" }} /> : <CheckCircle size={16} style={{ color: "var(--ok)" }} />}
+              <span style={{ fontWeight: 700, fontSize: 14, color: importResult.saltati > 0 ? "var(--wa)" : "var(--ok)" }}>
+                Import completato: {importResult.importati} importati, {importResult.saltati} saltati
+              </span>
+              <button onClick={() => setImportResult(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--tm)" }}>x</button>
+            </div>
+            {importResult.errori.length > 0 && (
+              <div style={{ fontSize: 12, color: "var(--wa)", maxHeight: 120, overflowY: "auto" }}>
+                {importResult.errori.map((e, i) => <div key={i}>{e}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ LIVELLO 1: Card totali ═══ */}
+        {vista === "totali" && totali && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+            {CARDS.map((card) => {
+              let value = 0;
+              if (card.key === "totale") value = totali.totale_ore;
+              else if (card.key === "ferie") value = totali.ferie.saldo;
+              else if (card.key === "rol") value = totali.rol.saldo;
+              else if (card.key === "banca_ore") value = totali.banca_ore.saldo;
+              else if (card.key === "bop") value = totali.bop.saldo;
+
+              return (
+                <button key={card.key} onClick={() => goReparti(card.key)} style={{
+                  padding: "22px 18px", borderRadius: 14, border: "none", cursor: "pointer",
+                  background: card.bg, color: "#fff", textAlign: "left",
+                  boxShadow: "0 4px 16px rgba(0,0,0,.15)", transition: "transform .15s",
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-3px)"}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = ""}
+                >
+                  {card.icon}
+                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1 }}>{value}h</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", opacity: 0.85 }}>{card.label}</div>
+                  <div style={{ fontSize: 10, opacity: 0.5, marginTop: 2 }}>Clicca per dettaglio →</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ═══ LIVELLO 2: Per reparto (ordinabile + ricercabile) ═══ */}
+        {vista === "reparti" && !loading && (
+          <div className="card" style={{ padding: 0 }}>
+            <SortableTable<RepartoRow>
+              columns={[
+                { key: "reparto", label: "Reparto", getValue: (r) => r.reparto, render: (r) => (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Building2 size={14} style={{ color: "var(--ac)" }} />
+                    <span style={{ fontWeight: 600 }}>{r.reparto}</span>
+                    <ChevronRight size={12} style={{ color: "var(--tm)", opacity: 0.4 }} />
+                  </div>
+                )},
+                { key: "dip", label: "Dipendenti", align: "center", getValue: (r) => r.num_dipendenti },
+                { key: "ferie", label: "Ferie", align: "right", color: "#059669", getValue: (r) => r.ferie_saldo, render: (r) => <span style={{ fontWeight: 600 }}>{r.ferie_saldo}h</span> },
+                { key: "rol", label: "ROL", align: "right", color: "#3b82f6", getValue: (r) => r.rol_saldo, render: (r) => <span style={{ fontWeight: 600 }}>{r.rol_saldo}h</span> },
+                { key: "banca", label: "Banca Ore", align: "right", color: "#d97706", getValue: (r) => r.banca_saldo, render: (r) => <span style={{ fontWeight: 600 }}>{r.banca_saldo}h</span> },
+                { key: "bop", label: "BOP", align: "right", color: "#8b5cf6", getValue: (r) => r.bop_saldo, render: (r) => <span style={{ fontWeight: 600 }}>{r.bop_saldo}h</span> },
+                { key: "totale", label: "Totale", align: "right", bold: true, getValue: (r) => r.totale, render: (r) => <span>{r.totale}h</span> },
+              ]}
+              data={reparti}
+              rowKey={(r) => r.reparto}
+              onRowClick={(r) => goDip(r.reparto)}
+              emptyMessage={`Nessun dato per ${anno}`}
             />
           </div>
-        </div>
+        )}
 
-        <div className="tw">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Dipendente</th>
-                <th>Reparto</th>
-                <th>Ferie residue</th>
-                <th>ROL residuo</th>
-                <th>Ore extra</th>
-                <th>% Ferie usate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((c) => {
-                const cnt = CONTATORI[c.id] ?? { ferie: 26, ferieUsate: 0, rol: 32, extra: 0 };
-                const ferieRes = cnt.ferie - cnt.ferieUsate;
-                const percFerie = Math.round((cnt.ferieUsate / cnt.ferie) * 100);
-                return (
-                  <tr key={c.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                        <Avatar ini={c.ini} color={c.col} size="sm" />
-                        <span className="t-main">{c.full}</span>
-                      </div>
-                    </td>
-                    <td>{c.dept}</td>
-                    <td>
-                      <span className={`gv${ferieRes < 5 ? "h" : ferieRes < 10 ? "m" : "l"}`}>
-                        {ferieRes}g
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`gv${cnt.rol < 8 ? "h" : cnt.rol < 16 ? "m" : "l"}`}>
-                        {cnt.rol}h
-                      </span>
-                    </td>
-                    <td>
-                      {cnt.extra > 0
-                        ? <span className="bdg wa">{cnt.extra}h</span>
-                        : <span className="mono" style={{ fontSize: 12 }}>—</span>
-                      }
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div className="pt" style={{ flex: 1 }}>
-                          <div
-                            className="pf"
-                            style={{
-                              width: `${percFerie}%`,
-                              background: percFerie > 70 ? "var(--er)" : percFerie > 40 ? "var(--wa)" : "var(--ok)",
-                            }}
-                          />
-                        </div>
-                        <span style={{ fontSize: 11, color: "var(--tm)", width: 30, textAlign: "right" }}>
-                          {percFerie}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {/* ═══ LIVELLO 3: Per dipendente (ordinabile + ricercabile) ═══ */}
+        {vista === "dipendenti" && !loading && (
+          <div className="card" style={{ padding: 0 }}>
+            <SortableTable<DipRow>
+              columns={[
+                { key: "nome", label: "Dipendente", getValue: (d) => d.nome, render: (d) => <span style={{ fontWeight: 600 }}>{d.nome}</span> },
+                { key: "matricola", label: "Matricola", getValue: (d) => d.matricola, render: (d) => <span style={{ fontSize: 12, fontFamily: "var(--m)", color: "var(--t2)" }}>{d.matricola}</span> },
+                { key: "ferie", label: "Ferie", align: "right", color: "#059669", getValue: (d) => d.ferie.saldo, render: (d) => (
+                  <div style={{ textAlign: "right" }}><div style={{ fontWeight: 600 }}>{d.ferie.saldo}h</div><div style={{ fontSize: 10, color: "var(--tm)" }}>{d.ferie.maturate}↑ {d.ferie.usate}↓</div></div>
+                )},
+                { key: "rol", label: "ROL", align: "right", color: "#3b82f6", getValue: (d) => d.rol.saldo, render: (d) => (
+                  <div style={{ textAlign: "right" }}><div style={{ fontWeight: 600 }}>{d.rol.saldo}h</div><div style={{ fontSize: 10, color: "var(--tm)" }}>{d.rol.maturato}↑ {d.rol.usato}↓</div></div>
+                )},
+                { key: "banca", label: "Banca Ore", align: "right", color: "#d97706", getValue: (d) => d.banca_ore.saldo, render: (d) => (
+                  <div style={{ textAlign: "right" }}><div style={{ fontWeight: 600 }}>{d.banca_ore.saldo}h</div><div style={{ fontSize: 10, color: "var(--tm)" }}>{d.banca_ore.maturata}↑ {d.banca_ore.usata}↓</div></div>
+                )},
+                { key: "bop", label: "BOP", align: "right", color: "#8b5cf6", getValue: (d) => d.bop.saldo, render: (d) => (
+                  <div style={{ textAlign: "right" }}><div style={{ fontWeight: 600 }}>{d.bop.saldo}h</div><div style={{ fontSize: 10, color: "var(--tm)" }}>{d.bop.maturato}↑ {d.bop.usato}↓</div></div>
+                )},
+                { key: "totale", label: "Totale", align: "right", bold: true, getValue: (d) => d.totale, render: (d) => <span>{d.totale}h</span> },
+              ]}
+              data={dipendenti}
+              rowKey={(d) => d.dip_id}
+              emptyMessage="Nessun dato"
+            />
+          </div>
+        )}
+
+        {loading && vista !== "totali" && (
+          <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><Loader2 size={24} style={{ color: "var(--ac)", animation: "sp 1s linear infinite" }} /></div>
+        )}
       </div>
     </>
   );

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { useHRStore } from "@/lib/store";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
 import { Plus, Calendar } from "lucide-react";
+import type { Richiesta } from "@/types";
 
 const STATO_STYLE: Record<string, string> = {
   pending: "wa",
@@ -21,6 +22,41 @@ export default function MieRichiestePage() {
   const mie = richieste.filter((r) => r.empId === currentUserId);
 
   function getCausale(id: string) { return causali.find((c) => c.id === id); }
+
+  const columns: Column<Richiesta>[] = [
+    {
+      key: "causale",
+      label: "Causale",
+      getValue: (r) => getCausale(r.causaleId)?.nome ?? r.causaleId,
+      render: (r) => <span className="t-main">{getCausale(r.causaleId)?.nome ?? r.causaleId}</span>,
+    },
+    { key: "dal", label: "Dal", getValue: (r) => r.dal },
+    { key: "al", label: "Al", getValue: (r) => r.al },
+    {
+      key: "ore",
+      label: "Ore",
+      getValue: (r) => r.ore ?? 0,
+      render: (r) => <span>{r.ore ? `${r.ore}h` : "\u2014"}</span>,
+    },
+    {
+      key: "note",
+      label: "Note",
+      getValue: (r) => r.note || "",
+      render: (r) => <span style={{ fontSize: 12 }}>{r.note || "\u2014"}</span>,
+    },
+    {
+      key: "stato",
+      label: "Stato",
+      getValue: (r) => STATO_LABELS[r.stato] ?? r.stato,
+      render: (r) => <span className={`bdg ${STATO_STYLE[r.stato]}`}>{STATO_LABELS[r.stato]}</span>,
+    },
+    {
+      key: "notaMgr",
+      label: "Nota mgr",
+      getValue: (r) => r.notaMgr || "",
+      render: (r) => <span style={{ fontSize: 12, color: "var(--tm)" }}>{r.notaMgr || "\u2014"}</span>,
+    },
+  ];
 
   return (
     <>
@@ -43,36 +79,13 @@ export default function MieRichiestePage() {
             <div style={{ fontSize: 12.5, color: "var(--tm)" }}>Non hai ancora inviato richieste ferie o permessi.</div>
           </div>
         ) : (
-          <div className="tw">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Causale</th>
-                  <th>Dal</th>
-                  <th>Al</th>
-                  <th>Ore</th>
-                  <th>Note</th>
-                  <th>Stato</th>
-                  <th>Nota mgr</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mie.map((r) => {
-                  const caus = getCausale(r.causaleId);
-                  return (
-                    <tr key={r.id}>
-                      <td className="t-main">{caus?.nome ?? r.causaleId}</td>
-                      <td>{r.dal}</td>
-                      <td>{r.al}</td>
-                      <td>{r.ore ? `${r.ore}h` : "—"}</td>
-                      <td style={{ fontSize: 12 }}>{r.note || "—"}</td>
-                      <td><span className={`bdg ${STATO_STYLE[r.stato]}`}>{STATO_LABELS[r.stato]}</span></td>
-                      <td style={{ fontSize: 12, color: "var(--tm)" }}>{r.notaMgr || "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="card" style={{ padding: 0 }}>
+            <SortableTable<Richiesta>
+              columns={columns}
+              data={mie}
+              rowKey={(r) => r.id}
+              emptyMessage="Nessuna richiesta"
+            />
           </div>
         )}
       </div>

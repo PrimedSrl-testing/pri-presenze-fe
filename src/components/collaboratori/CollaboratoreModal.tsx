@@ -45,7 +45,7 @@ export function CollaboratoreModal({ open, data, onClose }: Props) {
       showToast("Collaboratore aggiornato", "ok");
     } else {
       addCollaboratore({
-        ...form, id: crypto.randomUUID(), full, ini,
+        ...form, id: (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)), full, ini,
         assignments: form.dept ? [{ dept: form.dept, dal: form.ini_contratto || new Date().toISOString().split("T")[0], al: null }] : [],
       });
       showToast("Collaboratore aggiunto", "ok");

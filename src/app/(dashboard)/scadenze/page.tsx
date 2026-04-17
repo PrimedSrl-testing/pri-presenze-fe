@@ -3,6 +3,7 @@
 import { Header } from "@/components/layout/Header";
 import { useHRStore } from "@/lib/store";
 import { Avatar } from "@/components/ui/Avatar";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
 import { AlertTriangle, Calendar } from "lucide-react";
 
 function daysDiff(dateStr: string): number {
@@ -11,20 +12,81 @@ function daysDiff(dateStr: string): number {
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+interface ScadenzaRow {
+  id: string;
+  full: string;
+  ini: string;
+  col: string;
+  dept: string;
+  tipo: string;
+  data: string;
+  days: number;
+}
+
 export default function ScadenzePage() {
   const { collaboratori } = useHRStore();
 
-  const scadenze = collaboratori
+  const scadenze: ScadenzaRow[] = collaboratori
     .filter((c) => c.attivo && c.fin_contratto)
     .map((c) => ({
-      c,
-      days: daysDiff(c.fin_contratto!),
+      id: c.id,
+      full: c.full,
+      ini: c.ini,
+      col: c.col,
+      dept: c.dept,
+      tipo: c.tipo,
       data: c.fin_contratto!,
+      days: daysDiff(c.fin_contratto!),
     }))
     .sort((a, b) => a.days - b.days);
 
   const critiche = scadenze.filter((s) => s.days <= 30).length;
   const inScadenza = scadenze.filter((s) => s.days > 30 && s.days <= 90).length;
+
+  const columns: Column<ScadenzaRow>[] = [
+    {
+      key: "dipendente",
+      label: "Dipendente",
+      getValue: (r) => r.full,
+      render: (r) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <Avatar ini={r.ini} color={r.col} size="sm" />
+          <span className="t-main">{r.full}</span>
+        </div>
+      ),
+    },
+    { key: "reparto", label: "Reparto", getValue: (r) => r.dept },
+    { key: "contratto", label: "Contratto", getValue: (r) => r.tipo },
+    {
+      key: "scadenza",
+      label: "Scadenza",
+      getValue: (r) => r.data,
+      render: (r) => <span className="mono">{r.data}</span>,
+    },
+    {
+      key: "giorni",
+      label: "Giorni rimasti",
+      getValue: (r) => r.days,
+      render: (r) => (
+        <span className={r.days <= 30 ? "gvh" : r.days <= 90 ? "gvm" : "gvl"}>
+          {r.days > 0 ? `${r.days} gg` : "Scaduto"}
+        </span>
+      ),
+    },
+    {
+      key: "urgenza",
+      label: "Urgenza",
+      getValue: (r) => r.days <= 0 ? "Scaduto" : r.days <= 30 ? "Critico" : r.days <= 90 ? "In scadenza" : "OK",
+      render: (r) => (
+        <>
+          {r.days <= 0 && <span className="bdg er">Scaduto</span>}
+          {r.days > 0 && r.days <= 30 && <span className="bdg er">Critico</span>}
+          {r.days > 30 && r.days <= 90 && <span className="bdg wa">In scadenza</span>}
+          {r.days > 90 && <span className="bdg ok">OK</span>}
+        </>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -68,53 +130,13 @@ export default function ScadenzePage() {
           </div>
         )}
 
-        <div className="tw">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Dipendente</th>
-                <th>Reparto</th>
-                <th>Contratto</th>
-                <th>Scadenza</th>
-                <th>Giorni rimasti</th>
-                <th>Urgenza</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scadenze.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--tm)" }}>
-                    Nessun contratto a termine registrato
-                  </td>
-                </tr>
-              ) : (
-                scadenze.map(({ c, days, data }) => (
-                  <tr key={c.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                        <Avatar ini={c.ini} color={c.col} size="sm" />
-                        <span className="t-main">{c.full}</span>
-                      </div>
-                    </td>
-                    <td>{c.dept}</td>
-                    <td>{c.tipo}</td>
-                    <td className="mono">{data}</td>
-                    <td>
-                      <span className={days <= 30 ? "gvh" : days <= 90 ? "gvm" : "gvl"}>
-                        {days > 0 ? `${days} gg` : "Scaduto"}
-                      </span>
-                    </td>
-                    <td>
-                      {days <= 0 && <span className="bdg er">Scaduto</span>}
-                      {days > 0 && days <= 30 && <span className="bdg er">Critico</span>}
-                      {days > 30 && days <= 90 && <span className="bdg wa">In scadenza</span>}
-                      {days > 90 && <span className="bdg ok">OK</span>}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="card" style={{ padding: 0 }}>
+          <SortableTable<ScadenzaRow>
+            columns={columns}
+            data={scadenze}
+            rowKey={(r) => r.id}
+            emptyMessage="Nessun contratto a termine registrato"
+          />
         </div>
       </div>
     </>

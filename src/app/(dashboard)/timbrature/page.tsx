@@ -3,6 +3,7 @@
 import { Header } from "@/components/layout/Header";
 import { useHRStore } from "@/lib/store";
 import { Avatar } from "@/components/ui/Avatar";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
 import { Clock, LogIn, LogOut } from "lucide-react";
 
 // Mock timbrature giornaliere
@@ -16,6 +17,17 @@ const TODAY_PUNCHES: Record<string, { in?: string; out?: string }> = {
   "7": { in: undefined, out: undefined },
 };
 
+interface TimbrRow {
+  id: string;
+  full: string;
+  ini: string;
+  col: string;
+  dept: string;
+  punchIn?: string;
+  punchOut?: string;
+  stato: "presente" | "uscito" | "assente";
+}
+
 export default function TimbraturePage() {
   const { collaboratori } = useHRStore();
   const oggi = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -24,6 +36,57 @@ export default function TimbraturePage() {
   const presenti = attivi.filter((c) => TODAY_PUNCHES[c.id]?.in && !TODAY_PUNCHES[c.id]?.out).length;
   const usciti = attivi.filter((c) => TODAY_PUNCHES[c.id]?.in && TODAY_PUNCHES[c.id]?.out).length;
   const assenti = attivi.filter((c) => !TODAY_PUNCHES[c.id]?.in).length;
+
+  const rows: TimbrRow[] = attivi.map((c) => {
+    const punch = TODAY_PUNCHES[c.id];
+    const stato = punch?.in && !punch?.out ? "presente" : punch?.in && punch?.out ? "uscito" : "assente";
+    return { id: c.id, full: c.full, ini: c.ini, col: c.col, dept: c.dept, punchIn: punch?.in, punchOut: punch?.out, stato };
+  });
+
+  const columns: Column<TimbrRow>[] = [
+    {
+      key: "dipendente",
+      label: "Dipendente",
+      getValue: (r) => r.full,
+      render: (r) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <Avatar ini={r.ini} color={r.col} size="sm" />
+          <span className="t-main">{r.full}</span>
+        </div>
+      ),
+    },
+    { key: "reparto", label: "Reparto", getValue: (r) => r.dept },
+    {
+      key: "ingresso",
+      label: "Ingresso",
+      getValue: (r) => r.punchIn ?? "",
+      render: (r) =>
+        r.punchIn
+          ? <span className="ts-punch in"><LogIn size={11} /> {r.punchIn}</span>
+          : <span style={{ color: "var(--tm)", fontSize: 12 }}>—</span>,
+    },
+    {
+      key: "uscita",
+      label: "Uscita",
+      getValue: (r) => r.punchOut ?? "",
+      render: (r) =>
+        r.punchOut
+          ? <span className="ts-punch out"><LogOut size={11} /> {r.punchOut}</span>
+          : <span style={{ color: "var(--tm)", fontSize: 12 }}>—</span>,
+    },
+    {
+      key: "stato",
+      label: "Stato",
+      getValue: (r) => r.stato,
+      render: (r) => (
+        <>
+          {r.stato === "presente" && <span className="bdg ok">In sede</span>}
+          {r.stato === "uscito" && <span className="bdg ac">Uscito</span>}
+          {r.stato === "assente" && <span className="bdg er">Assente</span>}
+        </>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -62,52 +125,13 @@ export default function TimbraturePage() {
         </div>
 
         {/* Tabella */}
-        <div className="tw">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Dipendente</th>
-                <th>Reparto</th>
-                <th>Ingresso</th>
-                <th>Uscita</th>
-                <th>Stato</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attivi.map((c) => {
-                const punch = TODAY_PUNCHES[c.id];
-                const stato = punch?.in && !punch?.out ? "presente" : punch?.in && punch?.out ? "uscito" : "assente";
-                return (
-                  <tr key={c.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                        <Avatar ini={c.ini} color={c.col} size="sm" />
-                        <span className="t-main">{c.full}</span>
-                      </div>
-                    </td>
-                    <td>{c.dept}</td>
-                    <td>
-                      {punch?.in
-                        ? <span className="ts-punch in"><LogIn size={11} /> {punch.in}</span>
-                        : <span style={{ color: "var(--tm)", fontSize: 12 }}>—</span>
-                      }
-                    </td>
-                    <td>
-                      {punch?.out
-                        ? <span className="ts-punch out"><LogOut size={11} /> {punch.out}</span>
-                        : <span style={{ color: "var(--tm)", fontSize: 12 }}>—</span>
-                      }
-                    </td>
-                    <td>
-                      {stato === "presente" && <span className="bdg ok">In sede</span>}
-                      {stato === "uscito" && <span className="bdg ac">Uscito</span>}
-                      {stato === "assente" && <span className="bdg er">Assente</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="card" style={{ padding: 0 }}>
+          <SortableTable<TimbrRow>
+            columns={columns}
+            data={rows}
+            rowKey={(r) => r.id}
+            emptyMessage="Nessuna timbratura"
+          />
         </div>
       </div>
     </>

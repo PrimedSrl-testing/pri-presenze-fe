@@ -7,6 +7,7 @@ import { AZIENDE } from "@/lib/data/aziende";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { SortableTable, type Column } from "@/components/ui/SortableTable";
 import { formatDate, getContractUrgency, daysUntil } from "@/lib/utils/date";
 import type { Collaboratore, TipoCollaborazione } from "@/types";
 import { CollaboratoreModal } from "./CollaboratoreModal";
@@ -51,6 +52,81 @@ export function CollaboratoriTable() {
     return <Badge variant={variant as "er" | "wa" | "in"}>{days < 0 ? "Scaduto" : `${days}gg`}</Badge>;
   }
 
+  const columns: Column<Collaboratore>[] = [
+    {
+      key: "collaboratore",
+      label: "Collaboratore",
+      getValue: (c) => c.full,
+      render: (c) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Avatar ini={c.ini} color={c.col} size="sm" />
+          <div>
+            <p className="t-main">{c.full}</p>
+            <p className="muted">{c.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "tipo",
+      label: "Tipo",
+      getValue: (c) => TIPO_LABELS[c.tipo],
+      render: (c) => <Badge variant="nn">{TIPO_LABELS[c.tipo]}</Badge>,
+    },
+    { key: "reparto", label: "Reparto", getValue: (c) => c.dept },
+    {
+      key: "azienda",
+      label: "Azienda",
+      getValue: (c) => AZIENDE.find((a) => a.id === c.co)?.nome ?? c.co,
+      render: (c) => {
+        const az = AZIENDE.find((a) => a.id === c.co);
+        return (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: az?.colore ?? "#94a3b8", display: "inline-block" }} />
+            {az?.nome ?? c.co}
+          </span>
+        );
+      },
+    },
+    { key: "contratto", label: "Contratto", getValue: (c) => c.tempo },
+    {
+      key: "scadenza",
+      label: "Scadenza",
+      getValue: (c) => c.fin_contratto ?? "",
+      render: (c) =>
+        c.fin_contratto ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: "var(--m)", fontSize: 12 }}>{formatDate(c.fin_contratto)}</span>
+            {urgencyBadge(c)}
+          </span>
+        ) : <span className="muted">&mdash;</span>,
+    },
+    {
+      key: "stato",
+      label: "Stato",
+      getValue: (c) => c.attivo ? "Attivo" : "Inattivo",
+      render: (c) => <Badge variant={c.attivo ? "ok" : "nn"}>{c.attivo ? "Attivo" : "Inattivo"}</Badge>,
+    },
+    {
+      key: "azioni",
+      label: "",
+      sortable: false,
+      searchable: false,
+      getValue: () => "",
+      render: (c) => (
+        <div style={{ display: "flex", gap: 2 }}>
+          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); setModal({ open: true, data: c }); }} title="Modifica">
+            <Pencil size={14} />
+          </button>
+          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDelete(c); }} title="Elimina"
+            style={{ color: "var(--er)" }}>
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div>
       {/* Toolbar */}
@@ -81,73 +157,13 @@ export function CollaboratoriTable() {
       </div>
 
       {/* Table */}
-      <div className="tw">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Collaboratore</th>
-              <th>Tipo</th>
-              <th>Reparto</th>
-              <th>Azienda</th>
-              <th>Contratto</th>
-              <th>Scadenza</th>
-              <th>Stato</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((c) => {
-              const az = AZIENDE.find((a) => a.id === c.co);
-              return (
-                <tr key={c.id}>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Avatar ini={c.ini} color={c.col} size="sm" />
-                      <div>
-                        <p className="t-main">{c.full}</p>
-                        <p className="muted">{c.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td><Badge variant="nn">{TIPO_LABELS[c.tipo]}</Badge></td>
-                  <td>{c.dept}</td>
-                  <td>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: az?.colore ?? "#94a3b8", display: "inline-block" }} />
-                      {az?.nome ?? c.co}
-                    </span>
-                  </td>
-                  <td>{c.tempo}</td>
-                  <td>
-                    {c.fin_contratto ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontFamily: "var(--m)", fontSize: 12 }}>{formatDate(c.fin_contratto)}</span>
-                        {urgencyBadge(c)}
-                      </span>
-                    ) : <span className="muted">—</span>}
-                  </td>
-                  <td><Badge variant={c.attivo ? "ok" : "nn"}>{c.attivo ? "Attivo" : "Inattivo"}</Badge></td>
-                  <td>
-                    <div style={{ display: "flex", gap: 2 }}>
-                      <button className="icon-btn" onClick={() => setModal({ open: true, data: c })} title="Modifica">
-                        <Pencil size={14} />
-                      </button>
-                      <button className="icon-btn" onClick={() => handleDelete(c)} title="Elimina"
-                        style={{ color: "var(--er)" }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: "40px 0", color: "var(--tm)" }}>
-                Nessun collaboratore trovato
-              </td></tr>
-            )}
-          </tbody>
-        </table>
+      <div className="card" style={{ padding: 0 }}>
+        <SortableTable<Collaboratore>
+          columns={columns}
+          data={filtered}
+          rowKey={(c) => c.id}
+          emptyMessage="Nessun collaboratore trovato"
+        />
       </div>
 
       <p className="muted" style={{ marginTop: 10 }}>{filtered.length} di {collaboratori.length} collaboratori</p>

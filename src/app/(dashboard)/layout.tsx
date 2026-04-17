@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastContainer } from "@/components/ui/Toast";
+import { SupportChat } from "@/components/supporto/SupportChat";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {children}
       </main>
       <ToastContainer />
+      <SupportChat />
     </div>
   );
 }
