@@ -31,12 +31,22 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       ? parseOverride(overrideRes.recordset[0])
       : null;
 
-    // Se non ci sono regole globali, restituisci null
+    // Se non ci sono regole globali, fall-back sull'override del dipendente (se presente)
+    // così la UI può comunque popolare/salvare i parametri.
     if (!globali) {
+      const effettiveFallback = override ? {
+        ft_eccesso_pipeline: override.ft_eccesso_pipeline ?? [],
+        pt_eccesso_pipeline: override.pt_eccesso_pipeline ?? [],
+        pt_supplementari_attivo: override.pt_supplementari_attivo ?? true,
+        straordinario_max_sett: override.straordinario_max_sett ?? 8,
+        straordinario_max_giorno: override.straordinario_max_giorno ?? 2,
+        straordinario_priorita_sabato: override.straordinario_priorita_sabato ?? true,
+        deficit_pipeline: override.deficit_pipeline ?? [],
+      } : null;
       return NextResponse.json({
         globali: null,
         override,
-        effettive: null,
+        effettive: effettiveFallback,
         has_override: override !== null,
       });
     }

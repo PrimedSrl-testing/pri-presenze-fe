@@ -99,9 +99,11 @@ export async function PATCH(
     const request = pool.request().input('id', sql.Int, Number(id));
 
     if (body.nome != null) { request.input('nome', sql.NVarChar(255), body.nome); sets.push('nome = @nome'); }
-    if (body.des_reparto != null) { request.input('des_reparto', sql.NVarChar(255), body.des_reparto); sets.push('des_reparto = @des_reparto'); }
+    if (body.des_reparto !== undefined) { request.input('des_reparto', sql.NVarChar(255), body.des_reparto); sets.push('des_reparto = @des_reparto'); }
+    if (body.id_reparto !== undefined) { request.input('id_reparto', sql.Float, body.id_reparto); sets.push('id_reparto = @id_reparto'); }
     if (body.des_contratto != null) { request.input('des_contratto', sql.NVarChar(255), body.des_contratto); sets.push('des_contratto = @des_contratto'); }
     if (body.ore_settimanali != null) { request.input('ore_settimanali', sql.Float, body.ore_settimanali); sets.push('ore_settimanali = @ore_settimanali'); }
+    if (body.des_programma !== undefined) { request.input('des_programma', sql.NVarChar(255), body.des_programma); sets.push('des_programma = @des_programma'); }
     if (body.data_inizio !== undefined) { request.input('data_inizio', sql.DateTime, body.data_inizio); sets.push('data_inizio = @data_inizio'); }
     if (body.data_fine !== undefined) { request.input('data_fine', sql.DateTime, body.data_fine); sets.push('data_fine = @data_fine'); }
 

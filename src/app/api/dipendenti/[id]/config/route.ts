@@ -64,6 +64,12 @@ export async function GET(
       doc_cf_file: r.doc_cf_file ?? null,
       doc_c2_file: r.doc_c2_file ?? null,
       doc_ps_file: r.doc_ps_file ?? null,
+      medico_famiglia: r.medico_famiglia ?? null,
+      medico_famiglia_tel: r.medico_famiglia_tel ?? null,
+      settimana_lavorativa: r.settimana_lavorativa ?? null,
+      token_self_service: r.token_self_service ?? null,
+      dati_da_verificare: !!r.dati_da_verificare,
+      data_autocompilazione: r.data_autocompilazione ?? null,
       tipo_rapporto: r.tipo_rapporto ?? null,
       regole_pausa: r.regole_pausa ? safeJSON(r.regole_pausa) : null,
       pausa_minuti: r.pausa_minuti,
@@ -72,6 +78,8 @@ export async function GET(
       flg_bop: !!r.flg_bop,
       flg_boa: !!r.flg_boa,
       flg_bos: !!r.flg_bos,
+      flg_compensazione_mensile: !!r.flg_compensazione_mensile,
+      flg_non_timbrante: !!r.flg_non_timbrante,
       tipo_assunzione: r.tipo_assunzione,
       stagionale_gia_censito: !!r.stagionale_gia_censito,
       kronos_badge: r.kronos_badge,
@@ -127,6 +135,10 @@ export async function PUT(
       .input('doc_cf_file', sql.NVarChar(500), body.doc_cf_file ?? null)
       .input('doc_c2_file', sql.NVarChar(500), body.doc_c2_file ?? null)
       .input('doc_ps_file', sql.NVarChar(500), body.doc_ps_file ?? null)
+      .input('medico_famiglia', sql.NVarChar(200), body.medico_famiglia ?? null)
+      .input('medico_famiglia_tel', sql.NVarChar(50), body.medico_famiglia_tel ?? null)
+      .input('settimana_lavorativa', sql.NVarChar(10), body.settimana_lavorativa ?? null)
+      .input('dati_da_verificare', sql.Bit, body.dati_da_verificare ? 1 : 0)
       .input('tipo_rapporto', sql.NVarChar(30), body.tipo_rapporto ?? null)
       .input('pausa_minuti', sql.Int, body.pausa_minuti ?? 30)
       .input('pausa_soglia_ore', sql.Decimal(5, 2), body.pausa_soglia_ore ?? 8)
@@ -134,6 +146,8 @@ export async function PUT(
       .input('flg_bop', sql.Bit, body.flg_bop ? 1 : 0)
       .input('flg_boa', sql.Bit, body.flg_boa ? 1 : 0)
       .input('flg_bos', sql.Bit, body.flg_bos ? 1 : 0)
+      .input('flg_compensazione_mensile', sql.Bit, body.flg_compensazione_mensile ? 1 : 0)
+      .input('flg_non_timbrante', sql.Bit, body.flg_non_timbrante ? 1 : 0)
       .input('tipo_assunzione', sql.NVarChar(20), body.tipo_assunzione ?? null)
       .input('stagionale_gia_censito', sql.Bit, body.stagionale_gia_censito ? 1 : 0)
       .input('kronos_badge', sql.NVarChar(50), body.kronos_badge ?? null)
@@ -149,8 +163,10 @@ export async function PUT(
              contatto_emergenza, contatto_emergenza_tel,
              pec, doc_carta_identita, doc_codice_fiscale, doc_c2_storico, doc_permesso_soggiorno,
              doc_ci_file, doc_cf_file, doc_c2_file, doc_ps_file,
+             medico_famiglia, medico_famiglia_tel, settimana_lavorativa,
              tipo_rapporto, regole_pausa, pausa_minuti, pausa_soglia_ore, pausa_auto,
-             flg_bop, flg_boa, flg_bos, tipo_assunzione, stagionale_gia_censito,
+             flg_bop, flg_boa, flg_bos, flg_compensazione_mensile, flg_non_timbrante,
+             tipo_assunzione, stagionale_gia_censito,
              kronos_badge, kronos_attivo, data_ins)
           VALUES
             (@dip_id, @codice_fiscale, @email, @telefono,
@@ -159,8 +175,10 @@ export async function PUT(
              @contatto_emergenza, @contatto_emergenza_tel,
              @pec, @doc_carta_identita, @doc_codice_fiscale, @doc_c2_storico, @doc_permesso_soggiorno,
              @doc_ci_file, @doc_cf_file, @doc_c2_file, @doc_ps_file,
+             @medico_famiglia, @medico_famiglia_tel, @settimana_lavorativa,
              @tipo_rapporto, @regole_pausa, @pausa_minuti, @pausa_soglia_ore, @pausa_auto,
-             @flg_bop, @flg_boa, @flg_bos, @tipo_assunzione, @stagionale_gia_censito,
+             @flg_bop, @flg_boa, @flg_bos, @flg_compensazione_mensile, @flg_non_timbrante,
+             @tipo_assunzione, @stagionale_gia_censito,
              @kronos_badge, @kronos_attivo, GETDATE())
         `);
     } else {
@@ -182,11 +200,18 @@ export async function PUT(
             doc_cf_file = @doc_cf_file,
             doc_c2_file = @doc_c2_file,
             doc_ps_file = @doc_ps_file,
+            medico_famiglia = @medico_famiglia,
+            medico_famiglia_tel = @medico_famiglia_tel,
+            settimana_lavorativa = @settimana_lavorativa,
+            dati_da_verificare = @dati_da_verificare,
             tipo_rapporto = @tipo_rapporto,
             regole_pausa = @regole_pausa,
             pausa_minuti = @pausa_minuti, pausa_soglia_ore = @pausa_soglia_ore,
             pausa_auto = @pausa_auto, flg_bop = @flg_bop, flg_boa = @flg_boa,
-            flg_bos = @flg_bos, tipo_assunzione = @tipo_assunzione,
+            flg_bos = @flg_bos,
+            flg_compensazione_mensile = @flg_compensazione_mensile,
+            flg_non_timbrante = @flg_non_timbrante,
+            tipo_assunzione = @tipo_assunzione,
             stagionale_gia_censito = @stagionale_gia_censito,
             kronos_badge = @kronos_badge, kronos_attivo = @kronos_attivo,
             data_mod = GETDATE()
@@ -227,6 +252,12 @@ export async function PUT(
       doc_cf_file: r.doc_cf_file ?? null,
       doc_c2_file: r.doc_c2_file ?? null,
       doc_ps_file: r.doc_ps_file ?? null,
+      medico_famiglia: r.medico_famiglia ?? null,
+      medico_famiglia_tel: r.medico_famiglia_tel ?? null,
+      settimana_lavorativa: r.settimana_lavorativa ?? null,
+      token_self_service: r.token_self_service ?? null,
+      dati_da_verificare: !!r.dati_da_verificare,
+      data_autocompilazione: r.data_autocompilazione ?? null,
       tipo_rapporto: r.tipo_rapporto ?? null,
       regole_pausa: r.regole_pausa ? safeJSON(r.regole_pausa) : null,
       pausa_minuti: r.pausa_minuti,
@@ -235,6 +266,8 @@ export async function PUT(
       flg_bop: !!r.flg_bop,
       flg_boa: !!r.flg_boa,
       flg_bos: !!r.flg_bos,
+      flg_compensazione_mensile: !!r.flg_compensazione_mensile,
+      flg_non_timbrante: !!r.flg_non_timbrante,
       tipo_assunzione: r.tipo_assunzione,
       stagionale_gia_censito: !!r.stagionale_gia_censito,
       kronos_badge: r.kronos_badge,

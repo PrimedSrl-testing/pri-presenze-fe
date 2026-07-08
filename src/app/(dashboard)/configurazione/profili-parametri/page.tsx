@@ -27,7 +27,6 @@ const ECCESSO_OPT = [
   { value: "straordinario", label: "Straordinario", color: "#d97706" },
   { value: "boa", label: "BOA", color: "#3b82f6" },
   { value: "bop", label: "BOP (Salvadanaio)", color: "#8b5cf6" },
-  { value: "bos", label: "BOS", color: "#6366f1" },
 ];
 const DEFICIT_OPT = [
   { value: "rol", label: "ROL", color: "#059669" },

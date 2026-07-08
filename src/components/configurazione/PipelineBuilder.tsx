@@ -28,7 +28,6 @@ const LABELS_ECCESSO: Record<string, string> = {
   boa: "BOA (Banca Ore Assenza)",
   straordinario: "Straordinario (pagabile)",
   bop: "BOP (Salvadanaio personale)",
-  bos: "BOS (Banca Ore Straordinario)",
 };
 
 const LABELS_DEFICIT: Record<string, string> = {

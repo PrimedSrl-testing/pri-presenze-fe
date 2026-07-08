@@ -6,21 +6,29 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/lib/store";
 import { SortableTable, type Column } from "@/components/ui/SortableTable";
+import { Modal } from "@/components/ui/Modal";
 import {
   Loader2, ArrowLeft, Calendar, Wallet, Clock,
   PiggyBank, TrendingUp, Building2, ChevronRight,
-  Download, Upload, FileSpreadsheet, CheckCircle, AlertTriangle,
+  Download, Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Trash2,
 } from "lucide-react";
 
 type Vista = "totali" | "reparti" | "dipendenti";
 
 interface TotaliData {
+  mese: number;
+  mesi_disponibili: number[];
   totale_ore: number;
   ferie: { saldo: number; maturate: number; usate: number };
   rol: { saldo: number; maturato: number; usato: number };
   banca_ore: { saldo: number; maturata: number; usata: number };
   bop: { saldo: number; maturato: number; usato: number };
 }
+
+const MESI_LABEL: Record<number, string> = {
+  1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile", 5: "Maggio", 6: "Giugno",
+  7: "Luglio", 8: "Agosto", 9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre",
+};
 
 interface RepartoRow {
   reparto: string; num_dipendenti: number;
@@ -47,6 +55,7 @@ const CARDS = [
 export default function ContatoriPage() {
   const { showToast } = useToastStore();
   const [anno, setAnno] = useState(new Date().getFullYear());
+  const [meseVis, setMeseVis] = useState<number | null>(null); // null = ultimo disponibile
   const [loading, setLoading] = useState(true);
   const [vista, setVista] = useState<Vista>("totali");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -59,35 +68,46 @@ export default function ContatoriPage() {
   const [nextImport, setNextImport] = useState<{ anno: number; mese: number } | null>(null);
   const [importAnno, setImportAnno] = useState(new Date().getFullYear());
   const [importMese, setImportMese] = useState(new Date().getMonth() + 1);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const meseQS = meseVis ? `&mese=${meseVis}` : "";
 
   const fetchTotali = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/contatori?anno=${anno}&vista=totali`);
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=totali${meseQS}`);
       if (res.ok) setTotali(await res.json());
     } catch (err: any) { showToast(err.message, "err"); }
     finally { setLoading(false); }
-  }, [anno, showToast]);
+  }, [anno, meseQS, showToast]);
 
   const fetchReparti = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/contatori?anno=${anno}&vista=reparti`);
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=reparti${meseQS}`);
       if (res.ok) { const d = await res.json(); setReparti(d.reparti ?? []); }
     } catch (err: any) { showToast(err.message, "err"); }
     finally { setLoading(false); }
-  }, [anno, showToast]);
+  }, [anno, meseQS, showToast]);
 
   const fetchDipendenti = useCallback(async (reparto: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/contatori?anno=${anno}&vista=dipendenti&reparto=${encodeURIComponent(reparto)}`);
+      const res = await fetch(`/api/contatori?anno=${anno}&vista=dipendenti&reparto=${encodeURIComponent(reparto)}${meseQS}`);
       if (res.ok) { const d = await res.json(); setDipendenti(d.dipendenti ?? []); }
     } catch (err: any) { showToast(err.message, "err"); }
     finally { setLoading(false); }
-  }, [anno, showToast]);
+  }, [anno, meseQS, showToast]);
 
   useEffect(() => { fetchTotali(); }, [fetchTotali]);
+
+  // Refetch viste reparti/dipendenti quando cambia mese o anno
+  useEffect(() => {
+    if (vista === "reparti") fetchReparti();
+    else if (vista === "dipendenti" && selectedReparto) fetchDipendenti(selectedReparto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meseQS]);
 
   // Carica il prossimo mese da importare
   useEffect(() => {
@@ -95,6 +115,24 @@ export default function ContatoriPage() {
       if (d.prossimo) { setNextImport(d.prossimo); setImportAnno(d.prossimo.anno); setImportMese(d.prossimo.mese); }
     }).catch(() => {});
   }, [importResult]);
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      const res = await fetch("/api/contatori", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore azzeramento");
+      showToast(`Contatori azzerati (${data.eliminati} record eliminati)`, "ok");
+      setResetOpen(false);
+      setVista("totali");
+      setSelectedCard(null);
+      fetchTotali();
+    } catch (err: any) {
+      showToast(err.message, "err");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const goReparti = (key: string) => { setSelectedCard(key); setVista("reparti"); fetchReparti(); };
   const goDip = (rep: string) => { setSelectedReparto(rep); setVista("dipendenti"); fetchDipendenti(rep); };
@@ -118,10 +156,30 @@ export default function ContatoriPage() {
               {vista === "reparti" && <><span style={{ fontWeight: 700, color: "var(--t)" }}>{cardLabel}</span> <ChevronRight size={12} style={{ display: "inline", verticalAlign: "middle" }} /> Per Reparto</>}
               {vista === "dipendenti" && <><span style={{ fontWeight: 700, color: "var(--t)" }}>{cardLabel}</span> <ChevronRight size={12} style={{ display: "inline", verticalAlign: "middle" }} /> <span style={{ fontWeight: 700, color: "var(--t)" }}>{selectedReparto}</span></>}
             </span>
+            {totali?.mese ? (
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--bg2)", color: "var(--tm)", marginLeft: 8 }}>
+                {MESI_LABEL[totali.mese]} {anno}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: "var(--tm)", fontWeight: 600 }}>Visualizza anno:</span>
-            <select className="fi" style={{ width: 90 }} value={anno} onChange={(e) => { setAnno(Number(e.target.value)); setVista("totali"); setSelectedCard(null); }}>
+            <span style={{ fontSize: 12, color: "var(--tm)", fontWeight: 600 }}>Visualizza:</span>
+            <select
+              className="fi"
+              style={{ width: 130 }}
+              value={meseVis ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setMeseVis(v === "" ? null : Number(v));
+              }}
+              title="Mese di riferimento (vuoto = ultimo disponibile)"
+            >
+              <option value="">Ultimo mese</option>
+              {(totali?.mesi_disponibili ?? []).map(m => (
+                <option key={m} value={m}>{MESI_LABEL[m]}</option>
+              ))}
+            </select>
+            <select className="fi" style={{ width: 90 }} value={anno} onChange={(e) => { setAnno(Number(e.target.value)); setMeseVis(null); setVista("totali"); setSelectedCard(null); }}>
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <div style={{ width: 1, height: 24, background: "var(--bdr)", margin: "0 4px" }} />
@@ -132,6 +190,21 @@ export default function ContatoriPage() {
             <select className="fi" style={{ width: 80 }} value={importAnno} onChange={(e) => setImportAnno(Number(e.target.value))}>
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+            <button
+              type="button"
+              disabled={resetting || importing}
+              onClick={() => setResetOpen(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px",
+                borderRadius: 8, fontSize: 13, fontWeight: 600,
+                cursor: resetting || importing ? "not-allowed" : "pointer",
+                background: "#fff", color: "#dc2626", border: "1.5px solid #dc2626",
+              }}
+              title="Elimina tutti i record dei contatori"
+            >
+              <Trash2 size={13} />
+              Azzera contatori
+            </button>
             <label style={{ cursor: importing ? "not-allowed" : "pointer" }}>
               <div style={{
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px",
@@ -275,6 +348,33 @@ export default function ContatoriPage() {
           <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><Loader2 size={24} style={{ color: "var(--ac)", animation: "sp 1s linear infinite" }} /></div>
         )}
       </div>
+
+      <Modal
+        open={resetOpen}
+        onClose={() => { if (!resetting) setResetOpen(false); }}
+        title="Azzera tutti i contatori"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetOpen(false)} disabled={resetting}>Annulla</Button>
+            <Button variant="danger" onClick={handleReset} disabled={resetting}>
+              {resetting ? <><Loader2 size={13} style={{ animation: "sp 1s linear infinite" }} /> Azzeramento…</> : <><Trash2 size={13} /> Conferma azzeramento</>}
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <AlertTriangle size={20} style={{ color: "#dc2626", flexShrink: 0, marginTop: 2 }} />
+            <div>
+              Verranno <b>eliminati tutti i record</b> dei contatori (ferie, ROL, banca ore, BOP) per <b>tutti gli anni e mesi</b>.
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--tm)" }}>
+            L'operazione è irreversibile. Per ripristinare i dati sarà necessario reimportare i file Excel del consulente.
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

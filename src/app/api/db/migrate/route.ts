@@ -305,6 +305,123 @@ const migrations: { name: string; sql: string }[] = [
       END
     `,
   },
+  // ── v7: Medico famiglia + settimana lavorativa + verifica dati ──
+  {
+    name: 'CFXX_HR_DIP_CONFIG__v7',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='medico_famiglia')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD medico_famiglia NVARCHAR(200) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='medico_famiglia_tel')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD medico_famiglia_tel NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='settimana_lavorativa')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD settimana_lavorativa NVARCHAR(10) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='token_self_service')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD token_self_service NVARCHAR(100) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='dati_da_verificare')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD dati_da_verificare BIT NOT NULL DEFAULT 0;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='data_autocompilazione')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD data_autocompilazione DATETIME NULL;
+    `,
+  },
+  // ── Movimenti BOP (scarico manuale) ──
+  {
+    name: 'CFXX_HR_BOP_MOVIMENTI',
+    sql: `CREATE TABLE CFXX_HR_BOP_MOVIMENTI (
+      id              INT IDENTITY(1,1) PRIMARY KEY,
+      dip_id          INT NOT NULL,
+      data_movimento  DATE NOT NULL,
+      tipo            NVARCHAR(30) NOT NULL, -- carico|scarico
+      ore             DECIMAL(6,2) NOT NULL,
+      motivazione     NVARCHAR(500) NULL,
+      creato_da       NVARCHAR(100) NULL,
+      data_ins        DATETIME NOT NULL DEFAULT GETDATE()
+    )`,
+  },
+  // ── Attestati formazione singoli per dipendente ──
+  {
+    name: 'CFXX_HR_ATTESTATI_FORMAZIONE',
+    sql: `CREATE TABLE CFXX_HR_ATTESTATI_FORMAZIONE (
+      id              INT IDENTITY(1,1) PRIMARY KEY,
+      dip_id          INT NOT NULL,
+      tecsam_id       INT NULL,
+      titolo          NVARCHAR(255) NOT NULL,
+      data_corso      DATE NULL,
+      data_scadenza   DATE NULL,
+      file_path       NVARCHAR(500) NULL,
+      firma_datore    BIT NOT NULL DEFAULT 0,
+      firma_datore_data DATETIME NULL,
+      inviato_dipendente BIT NOT NULL DEFAULT 0,
+      inviato_data    DATETIME NULL,
+      note            NVARCHAR(500) NULL,
+      data_ins        DATETIME NOT NULL DEFAULT GETDATE()
+    )`,
+  },
+  // ── Documenti firmati (firma FEA) ──
+  {
+    name: 'CFXX_HR_DOCUMENTI_FIRMATI',
+    sql: `CREATE TABLE CFXX_HR_DOCUMENTI_FIRMATI (
+      id              INT IDENTITY(1,1) PRIMARY KEY,
+      dip_id          INT NOT NULL,
+      tipo_documento  NVARCHAR(50) NOT NULL, -- contratto|informativa|tfr|privacy|iban|formazione|codice_etico|altro
+      titolo          NVARCHAR(255) NOT NULL,
+      file_originale  NVARCHAR(500) NULL,
+      file_firmato    NVARCHAR(500) NULL,
+      stato           NVARCHAR(30) NOT NULL DEFAULT 'bozza', -- bozza|inviato|firmato_dipendente|firmato_datore|completato
+      richiede_firma_dipendente BIT NOT NULL DEFAULT 1,
+      richiede_firma_datore BIT NOT NULL DEFAULT 0,
+      firma_dipendente_data DATETIME NULL,
+      firma_datore_data DATETIME NULL,
+      token_firma     NVARCHAR(100) NULL,
+      otp_code        NVARCHAR(10) NULL,
+      otp_scadenza    DATETIME NULL,
+      data_ins        DATETIME NOT NULL DEFAULT GETDATE(),
+      data_mod        DATETIME NULL
+    )`,
+  },
+  // ── v8: Estensione ANAG_DIP + DIP_CONFIG da CSV consulente ──
+  {
+    name: 'CFXX_HR_ANAG_DIP__v8',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='cognome')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD cognome NVARCHAR(100) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='prenome')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD prenome NVARCHAR(100) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='tipo_soggetto')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD tipo_soggetto NVARCHAR(100) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='data_trasformazione')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD data_trasformazione DATE NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='data_cessazione')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD data_cessazione DATE NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='cessato')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD cessato BIT NOT NULL DEFAULT 0;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='qualifica_inps')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD qualifica_inps NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='livello_contrattuale')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD livello_contrattuale NVARCHAR(30) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='mansione_desc')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD mansione_desc NVARCHAR(255) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='percentuale_part_time')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD percentuale_part_time DECIMAL(5,2) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='cod_qualifica_professionale')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD cod_qualifica_professionale NVARCHAR(50) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_ANAG_DIP' AND COLUMN_NAME='qualifica_professionale')
+        ALTER TABLE CFXX_HR_ANAG_DIP ADD qualifica_professionale NVARCHAR(255) NULL;
+    `,
+  },
+  // ── v9: Campi anagrafici aggiuntivi in DIP_CONFIG ──
+  {
+    name: 'CFXX_HR_DIP_CONFIG__v9',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='stato_civile')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD stato_civile NVARCHAR(30) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='percentuale_disabile')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD percentuale_disabile DECIMAL(5,2) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='titolo_studio')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD titolo_studio NVARCHAR(100) NULL;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='lingua')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD lingua NVARCHAR(50) NULL;
+    `,
+  },
   // ── Profili parametri con filtri (auto-applicazione) ──
   {
     name: 'CFXX_HR_PROFILI_PARAMETRI',
@@ -421,6 +538,27 @@ const migrations: { name: string; sql: string }[] = [
       data_mod        DATETIME NULL,
       CONSTRAINT UQ_DIP_ORARIO UNIQUE (dip_id)
     )`,
+  },
+  // ── v8: Contratti ciclici — template orario per periodo (orario settimanale dinamico) ──
+  {
+    name: 'CFXX_HR_CONTRATTI_CICLICI__v8',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_CONTRATTI_CICLICI' AND COLUMN_NAME='periodo1_template_id')
+      BEGIN
+        ALTER TABLE CFXX_HR_CONTRATTI_CICLICI ADD periodo1_template_id INT NULL;
+        ALTER TABLE CFXX_HR_CONTRATTI_CICLICI ADD periodo2_template_id INT NULL;
+      END
+    `,
+  },
+  // ── v10: DIP_CONFIG — flag compensazione mensile + flag non timbrante ──
+  {
+    name: 'CFXX_HR_DIP_CONFIG__v10',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='flg_compensazione_mensile')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD flg_compensazione_mensile BIT NOT NULL DEFAULT 0;
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='CFXX_HR_DIP_CONFIG' AND COLUMN_NAME='flg_non_timbrante')
+        ALTER TABLE CFXX_HR_DIP_CONFIG ADD flg_non_timbrante BIT NOT NULL DEFAULT 0;
+    `,
   },
   // ── Tecsam: tracciamento visite mediche e formazione ──
   {

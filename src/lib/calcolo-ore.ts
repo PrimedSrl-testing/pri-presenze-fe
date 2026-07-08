@@ -14,6 +14,19 @@ export interface CalcoloInput {
   /** Ore lavorate per giorno della settimana (1=Lun..7=Dom). Opzionale: serve per priorita sabato. */
   ore_per_giorno?: Partial<Record<number, number>>;
   regole: RegoleEffettive;
+  /**
+   * Se attivo, prima della pipeline le ore in più del mese compensano le ore in meno.
+   * Solo il saldo residuo (se positivo) passa alla pipeline (supplementare → straordinario → BOP).
+   */
+  flg_compensazione_mensile?: boolean;
+  /**
+   * Bilancio mensile del dipendente (somma di tutte le ore in più/meno accumulate nel mese).
+   * Se omesso, viene derivato da ore_lavorate - ore_contrattuali (caso settimanale).
+   * Quando il flag compensazione è attivo, questo è il valore che la pipeline deve processare:
+   * - positivo: ore residue da assegnare a supplementare/straord/BOP
+   * - <=0: nessuna eccedenza, le ore in meno sono state coperte dalle ore in più (no scarico ROL/Ferie)
+   */
+  bilancio_mensile?: { credito: number; debito: number };
 }
 
 export interface CalcoloOutput {
@@ -23,6 +36,10 @@ export interface CalcoloOutput {
   ore_bop: number;
   ore_bos: number;
   ore_bob: number; // backward compat: somma di tutti i bucket banca ore
+  /** Ore di "debito" coperte dalla compensazione mensile (informativo) */
+  ore_compensate?: number;
+  /** Se compensazione attiva, indica se sono state coperte tutte le ore mancanti */
+  compensazione_completa?: boolean;
 }
 
 // ─── Merge regole globali + override dipendente ─────────────────────────────
@@ -52,7 +69,7 @@ export function mergeRegole(
 // ─── Calcolo principale ─────────────────────────────────────────────────────
 
 export function calcolaOre(input: CalcoloInput): CalcoloOutput {
-  const { ore_contrattuali, ore_lavorate, ore_per_giorno, regole } = input;
+  const { ore_contrattuali, ore_lavorate, ore_per_giorno, regole, flg_compensazione_mensile, bilancio_mensile } = input;
   const isPT = ore_contrattuali < 40;
 
   const result: CalcoloOutput = {
@@ -64,12 +81,31 @@ export function calcolaOre(input: CalcoloInput): CalcoloOutput {
     ore_bob: 0,
   };
 
-  // Nessuna eccedenza: il lavoratore ha fatto meno o uguale alle ore contrattuali
-  if (ore_lavorate <= ore_contrattuali) {
-    return result;
+  // ── Step 0: Compensazione Mensile (se attiva) ──────────────────────────
+  // La somma debito/credito infra-mese viene risolta PRIMA della pipeline.
+  // L'output `remaining` rappresenta il "saldo attivo" netto del mese.
+  let remaining: number;
+  if (flg_compensazione_mensile && bilancio_mensile) {
+    const credito = Math.max(0, Number(bilancio_mensile.credito) || 0);
+    const debito = Math.max(0, Number(bilancio_mensile.debito) || 0);
+    const compensate = Math.min(credito, debito);
+    result.ore_compensate = round2(compensate);
+    result.compensazione_completa = credito >= debito;
+    const saldoNetto = credito - debito;
+    if (saldoNetto <= 0) {
+      // Tutte le ore in più hanno coperto (o non bastato a coprire) il debito.
+      // In ogni caso, niente eccedenza da passare alla pipeline.
+      // Eventuale debito residuo (saldoNetto < 0) sarà gestito dalla logica deficit (ROL/Ferie/BOP), non da calcolaOre.
+      return result;
+    }
+    remaining = saldoNetto;
+  } else {
+    // Modalità classica (settimanale): nessuna eccedenza se lavorate ≤ contrattuali
+    if (ore_lavorate <= ore_contrattuali) {
+      return result;
+    }
+    remaining = ore_lavorate - ore_contrattuali;
   }
-
-  let remaining = ore_lavorate - ore_contrattuali;
 
   // ── Step 1: Part-time supplementari (ore tra contratto e 40h) ─────────
   if (isPT && regole.pt_supplementari_attivo) {

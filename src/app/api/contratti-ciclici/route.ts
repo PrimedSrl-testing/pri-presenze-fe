@@ -33,10 +33,12 @@ export async function POST(req: NextRequest) {
       .input('periodo1_da_giorno', sql.Int, body.periodo1_da_giorno)
       .input('periodo1_ore_sett', sql.Decimal(5, 2), body.periodo1_ore_sett)
       .input('periodo1_contratto_id', sql.Int, body.periodo1_contratto_id ?? null)
+      .input('periodo1_template_id', sql.Int, body.periodo1_template_id ?? null)
       .input('periodo2_da_mese', sql.Int, body.periodo2_da_mese)
       .input('periodo2_da_giorno', sql.Int, body.periodo2_da_giorno)
       .input('periodo2_ore_sett', sql.Decimal(5, 2), body.periodo2_ore_sett)
       .input('periodo2_contratto_id', sql.Int, body.periodo2_contratto_id ?? null)
+      .input('periodo2_template_id', sql.Int, body.periodo2_template_id ?? null)
       .input('override_data_switch1', sql.Date, body.override_data_switch1 ?? null)
       .input('override_data_switch2', sql.Date, body.override_data_switch2 ?? null)
       .input('anno_riferimento', sql.Int, body.anno_riferimento ?? null)
@@ -44,13 +46,13 @@ export async function POST(req: NextRequest) {
       .input('note', sql.NVarChar(500), body.note ?? null)
       .query(`
         INSERT INTO CFXX_HR_CONTRATTI_CICLICI
-          (dip_id, periodo1_da_mese, periodo1_da_giorno, periodo1_ore_sett, periodo1_contratto_id,
-           periodo2_da_mese, periodo2_da_giorno, periodo2_ore_sett, periodo2_contratto_id,
+          (dip_id, periodo1_da_mese, periodo1_da_giorno, periodo1_ore_sett, periodo1_contratto_id, periodo1_template_id,
+           periodo2_da_mese, periodo2_da_giorno, periodo2_ore_sett, periodo2_contratto_id, periodo2_template_id,
            override_data_switch1, override_data_switch2, anno_riferimento, attivo, note, data_ins)
         OUTPUT INSERTED.*
         VALUES
-          (@dip_id, @periodo1_da_mese, @periodo1_da_giorno, @periodo1_ore_sett, @periodo1_contratto_id,
-           @periodo2_da_mese, @periodo2_da_giorno, @periodo2_ore_sett, @periodo2_contratto_id,
+          (@dip_id, @periodo1_da_mese, @periodo1_da_giorno, @periodo1_ore_sett, @periodo1_contratto_id, @periodo1_template_id,
+           @periodo2_da_mese, @periodo2_da_giorno, @periodo2_ore_sett, @periodo2_contratto_id, @periodo2_template_id,
            @override_data_switch1, @override_data_switch2, @anno_riferimento, @attivo, @note, GETDATE())
       `);
 

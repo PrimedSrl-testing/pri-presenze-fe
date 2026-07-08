@@ -27,7 +27,6 @@ const ECCESSO_OPTIONS = [
   { key: "BOA", value: "boa" },
   { key: "Straordinario", value: "straordinario" },
   { key: "BOP", value: "bop" },
-  { key: "BOS", value: "bos" },
 ];
 
 const DEFICIT_OPTIONS = [

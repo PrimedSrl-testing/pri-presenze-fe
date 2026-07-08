@@ -3,6 +3,26 @@ import { getPool, sql } from '@/lib/db';
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// Sincronizza i campi data_inizio/data_fine/des_contratto/ore_settimanali in CFXX_HR_ANAG_DIP
+// con il contratto attivo (o, in mancanza, il più recente) presente nello storico.
+async function syncAnagraficaFromStorico(pool: any, dipId: number) {
+  await pool.request().input('dip_id', sql.Int, dipId).query(`
+    UPDATE d
+    SET d.data_inizio = c.data_inizio,
+        d.data_fine = c.data_fine,
+        d.des_contratto = ISNULL(c.tipo_contratto, d.des_contratto),
+        d.ore_settimanali = ISNULL(c.ore_settimanali, d.ore_settimanali)
+    FROM CFXX_HR_ANAG_DIP d
+    CROSS APPLY (
+      SELECT TOP 1 data_inizio, data_fine, tipo_contratto, ore_settimanali
+      FROM CFXX_HR_STORICO_CONTRATTI
+      WHERE dip_id = @dip_id
+      ORDER BY attivo DESC, data_inizio DESC
+    ) c
+    WHERE d.id = @dip_id
+  `);
+}
+
 // GET /api/dipendenti/:id/contratti — storico contratti
 export async function GET(_req: NextRequest, ctx: Ctx) {
   try {
@@ -80,6 +100,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
           (@dip_id, @data_inizio, @data_fine, @tipo_contratto, @ore_settimanali, @tipo_rapporto, @note, @attivo)
       `);
 
+    await syncAnagraficaFromStorico(pool, Number(id));
     return NextResponse.json(result.recordset[0], { status: 201 });
   } catch (err: any) {
     console.error('[API] POST /api/dipendenti/:id/contratti error:', err);
@@ -90,6 +111,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 // PUT /api/dipendenti/:id/contratti — aggiorna contratto (body.contratto_id)
 export async function PUT(req: NextRequest, ctx: Ctx) {
   try {
+    const { id } = await ctx.params;
     const body = await req.json();
     const pool = await getPool();
 
@@ -116,6 +138,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         WHERE id = @id
       `);
 
+    await syncAnagraficaFromStorico(pool, Number(id));
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error('[API] PUT /api/dipendenti/:id/contratti error:', err);
@@ -124,8 +147,9 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 }
 
 // DELETE /api/dipendenti/:id/contratti — elimina contratto (body.contratto_id via query param)
-export async function DELETE(req: NextRequest) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
   try {
+    const { id } = await ctx.params;
     const { searchParams } = new URL(req.url);
     const contrattoId = searchParams.get('contratto_id');
     if (!contrattoId) {
@@ -138,6 +162,7 @@ export async function DELETE(req: NextRequest) {
       .input('id', sql.Int, Number(contrattoId))
       .query('DELETE FROM CFXX_HR_STORICO_CONTRATTI WHERE id = @id');
 
+    await syncAnagraficaFromStorico(pool, Number(id));
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error('[API] DELETE /api/dipendenti/:id/contratti error:', err);

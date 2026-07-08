@@ -199,6 +199,15 @@ export interface DipConfig {
   doc_cf_file: string | null;
   doc_c2_file: string | null;
   doc_ps_file: string | null;
+  // Medico famiglia
+  medico_famiglia: string | null;
+  medico_famiglia_tel: string | null;
+  // Settimana lavorativa
+  settimana_lavorativa: "lun-ven" | "lun-sab" | null;
+  // Self-service
+  token_self_service: string | null;
+  dati_da_verificare: boolean;
+  data_autocompilazione: string | null;
   // Rapporto lavorativo
   tipo_rapporto: "diretto" | "somministrato" | null;
   // Pausa pranzo (multi-livello)
@@ -210,6 +219,9 @@ export interface DipConfig {
   flg_bop: boolean;           // Banca Ore Presenze
   flg_boa: boolean;           // Banca Ore Assenza
   flg_bos: boolean;           // Banca Ore Straordinario
+  // Comportamento fine mese
+  flg_compensazione_mensile: boolean; // Se true, compensa debito↔credito infra-mese prima della pipeline
+  flg_non_timbrante: boolean;          // Se true, genera presenze automatiche da template orario
   // Assunzione
   tipo_assunzione: "stagionale" | "nuovo" | null;
   stagionale_gia_censito: boolean;
@@ -395,6 +407,56 @@ export interface ProfiloParametri {
   note: string | null;
 }
 
+// ─── Movimenti BOP ───────────────────────────────────────────────────────
+
+export interface MovimentoBOP {
+  id: number;
+  dip_id: number;
+  data_movimento: string;
+  tipo: "carico" | "scarico";
+  ore: number;
+  motivazione: string | null;
+  creato_da: string | null;
+  data_ins: string;
+}
+
+// ─── Attestati Formazione ────────────────────────────────────────────────
+
+export interface AttestatoFormazione {
+  id: number;
+  dip_id: number;
+  tecsam_id: number | null;
+  titolo: string;
+  data_corso: string | null;
+  data_scadenza: string | null;
+  file_path: string | null;
+  firma_datore: boolean;
+  firma_datore_data: string | null;
+  inviato_dipendente: boolean;
+  inviato_data: string | null;
+  note: string | null;
+}
+
+// ─── Documenti Firmati (FEA) ─────────────────────────────────────────────
+
+export type TipoDocumentoFirmato = "contratto" | "informativa" | "tfr" | "privacy" | "iban" | "formazione" | "codice_etico" | "altro";
+export type StatoDocumentoFirmato = "bozza" | "inviato" | "firmato_dipendente" | "firmato_datore" | "completato";
+
+export interface DocumentoFirmato {
+  id: number;
+  dip_id: number;
+  tipo_documento: TipoDocumentoFirmato;
+  titolo: string;
+  file_originale: string | null;
+  file_firmato: string | null;
+  stato: StatoDocumentoFirmato;
+  richiede_firma_dipendente: boolean;
+  richiede_firma_datore: boolean;
+  firma_dipendente_data: string | null;
+  firma_datore_data: string | null;
+  data_ins: string;
+}
+
 // ─── Saldi Dipendente ────────────────────────────────────────────────────
 
 export interface SaldoDipendente {
@@ -446,6 +508,7 @@ export interface StepEccesso {
 export interface StepDeficit {
   source: FonteDeficit;
   per: ApplicazioneDeficit; // intera = giornata intera, parziale = ore
+  max_ore?: number | null; // cap di ore prelevabili (usato per BOP). null/undefined = illimitato
 }
 
 export interface RegoleGlobali {

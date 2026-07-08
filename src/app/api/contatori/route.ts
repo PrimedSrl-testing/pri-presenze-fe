@@ -1,21 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool, sql } from '@/lib/db';
 
-// GET /api/contatori?anno=2026&vista=totali|reparti|dipendenti&reparto=NOME
+// GET /api/contatori?anno=2026&mese=3&vista=totali|reparti|dipendenti&reparto=NOME
+// mese opzionale: se non fornito usa l'ultimo mese disponibile per l'anno
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const anno = Number(searchParams.get('anno') ?? new Date().getFullYear());
+    const meseParam = searchParams.get('mese');
+    const meseRichiesto = meseParam ? Number(meseParam) : null;
     const vista = searchParams.get('vista') ?? 'totali';
     const reparto = searchParams.get('reparto');
 
     const pool = await getPool();
 
+    // Mesi disponibili per l'anno (utile alla UI per popolare il selettore)
+    const mesiRes = await pool.request().input('anno', sql.Int, anno)
+      .query(`SELECT DISTINCT mese FROM CFXX_HR_SALDI WHERE anno = @anno ORDER BY mese`);
+    const mesiDisponibili = mesiRes.recordset.map((r: any) => r.mese as number);
+
+    // Mese effettivo da usare: quello richiesto se presente nei dati, altrimenti l'ultimo disponibile
+    const meseEffettivo = meseRichiesto && mesiDisponibili.includes(meseRichiesto)
+      ? meseRichiesto
+      : (mesiDisponibili.length ? mesiDisponibili[mesiDisponibili.length - 1] : 0);
+
     if (vista === 'totali') {
-      // Prendi l'ultimo mese importato per l'anno
-      const lastMonth = await pool.request().input('anno', sql.Int, anno)
-        .query(`SELECT ISNULL(MAX(mese), 0) AS max_mese FROM CFXX_HR_SALDI WHERE anno = @anno`);
-      const mese = lastMonth.recordset[0].max_mese || 0;
+      const mese = meseEffettivo;
 
       // Totali dall'ultimo mese (dati cumulativi dal consulente)
       const result = await pool
@@ -49,6 +59,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         vista: 'totali',
         anno,
+        mese,
+        mesi_disponibili: mesiDisponibili,
         totale_ore: round2(totale),
         ferie: { saldo: round2(r.ferie_saldo), maturate: round2(r.ferie_maturate), usate: round2(r.ferie_usate) },
         rol: { saldo: round2(r.rol_saldo), maturato: round2(r.rol_maturato), usato: round2(r.rol_usato) },
@@ -58,9 +70,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (vista === 'reparti') {
-      const lastMonth = await pool.request().input('anno', sql.Int, anno)
-        .query(`SELECT ISNULL(MAX(mese), 0) AS max_mese FROM CFXX_HR_SALDI WHERE anno = @anno`);
-      const mese = lastMonth.recordset[0].max_mese || 0;
+      const mese = meseEffettivo;
 
       const result = await pool
         .request()
@@ -83,6 +93,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         vista: 'reparti',
         anno,
+        mese,
+        mesi_disponibili: mesiDisponibili,
         reparti: result.recordset.map((r: any) => ({
           reparto: r.reparto ?? 'Senza reparto',
           num_dipendenti: r.num_dipendenti,
@@ -96,9 +108,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (vista === 'dipendenti') {
-      const lastMonth = await pool.request().input('anno', sql.Int, anno)
-        .query(`SELECT ISNULL(MAX(mese), 0) AS max_mese FROM CFXX_HR_SALDI WHERE anno = @anno`);
-      const mese = lastMonth.recordset[0].max_mese || 0;
+      const mese = meseEffettivo;
 
       const request = pool.request().input('anno', sql.Int, anno).input('mese', sql.Int, mese);
       let where = '';
@@ -133,6 +143,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         vista: 'dipendenti',
         anno, mese,
+        mesi_disponibili: mesiDisponibili,
         reparto: reparto ?? 'Tutti',
         dipendenti: result.recordset.map((r: any) => ({
           dip_id: r.dip_id, nome: r.nome, matricola: r.matricola, reparto: r.des_reparto,
@@ -148,6 +159,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'vista non valida' }, { status: 400 });
   } catch (err: any) {
     console.error('[API] GET /api/contatori error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// DELETE /api/contatori — Azzera tutti i contatori (svuota CFXX_HR_SALDI)
+export async function DELETE() {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`DELETE FROM CFXX_HR_SALDI`);
+    return NextResponse.json({ ok: true, eliminati: result.rowsAffected?.[0] ?? 0 });
+  } catch (err: any) {
+    console.error('[API] DELETE /api/contatori error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

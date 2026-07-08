@@ -141,11 +141,18 @@ export async function POST(req: NextRequest) {
       return isNaN(n) ? 0 : Math.round(n * 100) / 100;
     };
 
-    let importati = 0;
     let saltati = 0;
     const errori: string[] = [];
 
-    // Righe dati: da riga 1 in poi
+    // Step 1: parse e match di tutte le righe in memoria (senza toccare il DB)
+    interface ValidRow {
+      dipId: number;
+      ferie_ap: number; ferie_maturate: number; ferie_usate: number; ferie_residuo: number;
+      rol_ap: number; rol_maturato: number; rol_usato: number; rol_residuo: number;
+      banca_ore_ap: number; banca_ore: number; banca_ore_usata: number; banca_ore_residuo: number;
+    }
+    const validRows: ValidRow[] = [];
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const matRaw = String(row[COL_MAT] ?? '').trim();
@@ -225,46 +232,94 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      try {
-        await pool.request()
-          .input('dip_id', sql.Int, dipId)
-          .input('anno', sql.Int, anno)
-          .input('mese', sql.Int, mese)
-          .input('ferie_ap', sql.Decimal(6, 2), getNum(row, COL_FERIE_AP))
-          .input('ferie_maturate', sql.Decimal(6, 2), getNum(row, COL_FERIE_MAT))
-          .input('ferie_usate', sql.Decimal(6, 2), getNum(row, COL_FERIE_GOD))
-          .input('ferie_residuo', sql.Decimal(6, 2), getNum(row, COL_FERIE_RES))
-          .input('rol_ap', sql.Decimal(6, 2), getNum(row, COL_ROL_AP))
-          .input('rol_maturato', sql.Decimal(6, 2), getNum(row, COL_ROL_MAT))
-          .input('rol_usato', sql.Decimal(6, 2), getNum(row, COL_ROL_GOD))
-          .input('rol_residuo', sql.Decimal(6, 2), getNum(row, COL_ROL_RES))
-          .input('banca_ore_ap', sql.Decimal(6, 2), getNum(row, COL_BO_AP))
-          .input('banca_ore', sql.Decimal(6, 2), getNum(row, COL_BO_MAT))
-          .input('banca_ore_usata', sql.Decimal(6, 2), getNum(row, COL_BO_GOD))
-          .input('banca_ore_residuo', sql.Decimal(6, 2), getNum(row, COL_BO_RES))
-          .query(`
-            MERGE CFXX_HR_SALDI AS t
-            USING (SELECT @dip_id AS dip_id, @anno AS anno, @mese AS mese) AS s
-            ON t.dip_id = s.dip_id AND t.anno = s.anno AND t.mese = s.mese
-            WHEN MATCHED THEN UPDATE SET
-              ferie_ap=@ferie_ap, ferie_maturate=@ferie_maturate, ferie_usate=@ferie_usate, ferie_residuo=@ferie_residuo,
-              rol_ap=@rol_ap, rol_maturato=@rol_maturato, rol_usato=@rol_usato, rol_residuo=@rol_residuo,
-              banca_ore_ap=@banca_ore_ap, banca_ore=@banca_ore, banca_ore_usata=@banca_ore_usata, banca_ore_residuo=@banca_ore_residuo,
-              data_mod=GETDATE()
-            WHEN NOT MATCHED THEN INSERT
-              (dip_id, anno, mese, ferie_ap, ferie_maturate, ferie_usate, ferie_residuo,
-               rol_ap, rol_maturato, rol_usato, rol_residuo,
-               banca_ore_ap, banca_ore, banca_ore_usata, banca_ore_residuo)
-            VALUES
-              (@dip_id, @anno, @mese, @ferie_ap, @ferie_maturate, @ferie_usate, @ferie_residuo,
-               @rol_ap, @rol_maturato, @rol_usato, @rol_residuo,
-               @banca_ore_ap, @banca_ore, @banca_ore_usata, @banca_ore_residuo);
-          `);
-        importati++;
-      } catch (dbErr: any) {
-        errori.push(`Riga ${i + 1}: ${dbErr.message}`);
-        saltati++;
+      validRows.push({
+        dipId,
+        ferie_ap: getNum(row, COL_FERIE_AP),
+        ferie_maturate: getNum(row, COL_FERIE_MAT),
+        ferie_usate: getNum(row, COL_FERIE_GOD),
+        ferie_residuo: getNum(row, COL_FERIE_RES),
+        rol_ap: getNum(row, COL_ROL_AP),
+        rol_maturato: getNum(row, COL_ROL_MAT),
+        rol_usato: getNum(row, COL_ROL_GOD),
+        rol_residuo: getNum(row, COL_ROL_RES),
+        banca_ore_ap: getNum(row, COL_BO_AP),
+        banca_ore: getNum(row, COL_BO_MAT),
+        banca_ore_usata: getNum(row, COL_BO_GOD),
+        banca_ore_residuo: getNum(row, COL_BO_RES),
+      });
+    }
+
+    // Step 2: se nessuna riga valida, abortisco SENZA toccare il DB (così non perdo i dati esistenti)
+    if (validRows.length === 0) {
+      return NextResponse.json({
+        error: `Nessuna riga valida trovata nel file. ${errori.length} righe saltate. Dati esistenti non modificati.`,
+        errori: errori.slice(0, 20),
+      }, { status: 400 });
+    }
+
+    // Step 2b: dedup per dipId (se lo stesso dipendente compare più volte nel file Excel,
+    // tengo solo l'ULTIMA occorrenza per evitare violazione UQ_SALDI)
+    const dedupMap = new Map<number, ValidRow>();
+    let duplicatiInFile = 0;
+    for (const r of validRows) {
+      if (dedupMap.has(r.dipId)) duplicatiInFile++;
+      dedupMap.set(r.dipId, r);
+    }
+    const finalRows = [...dedupMap.values()];
+    if (duplicatiInFile > 0) {
+      errori.push(`${duplicatiInFile} dipendenti duplicati nel file Excel — tenuta l'ultima occorrenza per ciascuno`);
+    }
+
+    // Step 3: replace transazionale — cancello SOLO i record del (anno, mese) caricato
+    // (così conservo lo storico dei mesi precedenti)
+    let importati = 0;
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      await new sql.Request(transaction)
+        .input('anno', sql.Int, anno)
+        .input('mese', sql.Int, mese)
+        .query(`DELETE FROM CFXX_HR_SALDI WHERE anno = @anno AND mese = @mese`);
+
+      for (const r of finalRows) {
+        try {
+          await new sql.Request(transaction)
+            .input('dip_id', sql.Int, r.dipId)
+            .input('anno', sql.Int, anno)
+            .input('mese', sql.Int, mese)
+            .input('ferie_ap', sql.Decimal(6, 2), r.ferie_ap)
+            .input('ferie_maturate', sql.Decimal(6, 2), r.ferie_maturate)
+            .input('ferie_usate', sql.Decimal(6, 2), r.ferie_usate)
+            .input('ferie_residuo', sql.Decimal(6, 2), r.ferie_residuo)
+            .input('rol_ap', sql.Decimal(6, 2), r.rol_ap)
+            .input('rol_maturato', sql.Decimal(6, 2), r.rol_maturato)
+            .input('rol_usato', sql.Decimal(6, 2), r.rol_usato)
+            .input('rol_residuo', sql.Decimal(6, 2), r.rol_residuo)
+            .input('banca_ore_ap', sql.Decimal(6, 2), r.banca_ore_ap)
+            .input('banca_ore', sql.Decimal(6, 2), r.banca_ore)
+            .input('banca_ore_usata', sql.Decimal(6, 2), r.banca_ore_usata)
+            .input('banca_ore_residuo', sql.Decimal(6, 2), r.banca_ore_residuo)
+            .query(`
+              INSERT INTO CFXX_HR_SALDI
+                (dip_id, anno, mese, ferie_ap, ferie_maturate, ferie_usate, ferie_residuo,
+                 rol_ap, rol_maturato, rol_usato, rol_residuo,
+                 banca_ore_ap, banca_ore, banca_ore_usata, banca_ore_residuo)
+              VALUES
+                (@dip_id, @anno, @mese, @ferie_ap, @ferie_maturate, @ferie_usate, @ferie_residuo,
+                 @rol_ap, @rol_maturato, @rol_usato, @rol_residuo,
+                 @banca_ore_ap, @banca_ore, @banca_ore_usata, @banca_ore_residuo)
+            `);
+          importati++;
+        } catch (dbErr: any) {
+          errori.push(`dip_id ${r.dipId}: ${dbErr.message}`);
+          saltati++;
+        }
       }
+
+      await transaction.commit();
+    } catch (txErr: any) {
+      try { await transaction.rollback(); } catch {}
+      throw txErr;
     }
 
     return NextResponse.json({ importati, saltati, errori: errori.slice(0, 20), totale_errori: errori.length });
