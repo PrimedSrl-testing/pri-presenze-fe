@@ -346,7 +346,7 @@ export interface DipendenteDB {
   des_contratto: string;
   data_inizio: string;
   data_fine: string | null;
-  des_programma: string;
+  des_programma: string | null;
   ore_settimanali: number;
   id_reparto: number;
   id_contratto: number;

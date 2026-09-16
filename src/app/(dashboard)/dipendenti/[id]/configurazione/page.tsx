@@ -87,6 +87,8 @@ export default function SchedaDipendentePage() {
   const [dirty, setDirty] = useState(false);
   const [inquadramentoDirty, setInquadramentoDirty] = useState(false);
   const [inquadramentoSaving, setInquadramentoSaving] = useState(false);
+  const [settimanaSaving, setSettimanaSaving] = useState(false);
+  const [settimanaSaved, setSettimanaSaved] = useState(false);
 
   // Regole
   const [hasOverride, setHasOverride] = useState(false);
@@ -254,12 +256,37 @@ export default function SchedaDipendentePage() {
   /* ── Helpers ─────────────────────────────────────────────────────────────── */
   const set = <K extends keyof typeof cfg>(k: K, v: (typeof cfg)[K]) => { setCfg((p) => ({ ...p, [k]: v })); setDirty(true); };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     setSaving(true);
     try {
       const res = await fetch(`/api/dipendenti/${id}/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...cfg, regole_pausa: regolePausa.length > 0 ? regolePausa : null }) });
-      if (!res.ok) throw new Error("Errore"); showToast("Salvato", "ok"); setDirty(false);
-    } catch (err: any) { showToast(err.message, "err"); } finally { setSaving(false); }
+      if (!res.ok) throw new Error("Errore"); showToast("Salvato", "ok"); setDirty(false); return true;
+    } catch (err: any) { showToast(err.message, "err"); return false; } finally { setSaving(false); }
+  };
+
+  /* Settimana lavorativa: salvataggio immediato al clic, senza pulsante Salva. */
+  const saveSettimanaLavorativa = async (v: "lun-ven" | "lun-sab") => {
+    const precedente = cfg.settimana_lavorativa;
+    if (precedente === v) return;
+    setCfg((p) => ({ ...p, settimana_lavorativa: v }));
+    setSettimanaSaved(false);
+    setSettimanaSaving(true);
+    try {
+      const res = await fetch(`/api/dipendenti/${id}/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...cfg, settimana_lavorativa: v, regole_pausa: regolePausa.length > 0 ? regolePausa : null }),
+      });
+      if (!res.ok) throw new Error("Errore nel salvataggio della settimana lavorativa");
+      setDirty(false);
+      setSettimanaSaved(true);
+      showToast("Settimana lavorativa salvata", "ok");
+    } catch (err: any) {
+      setCfg((p) => ({ ...p, settimana_lavorativa: precedente }));
+      showToast(err.message || "Errore nel salvataggio", "err");
+    } finally {
+      setSettimanaSaving(false);
+    }
   };
 
   const handleSaveRegole = async () => {
@@ -809,27 +836,47 @@ export default function SchedaDipendentePage() {
 
           {/* Settimana Lavorativa */}
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Sec icon={<CalendarClock size={16} />} bg="var(--okl)" color="var(--ok)" title="Settimana Lavorativa" sub="Determina come il sistema calcola straordinari ed eccedenze del sabato" />
+            <Sec icon={<CalendarClock size={16} />} bg="var(--okl)" color="var(--ok)" title="Settimana Lavorativa" sub="Determina come il sistema calcola straordinari ed eccedenze del sabato. La scelta si salva da sola: non serve premere Salva." />
             <div style={{ display: "flex", gap: 12 }}>
               {([
                 { v: "lun-ven" as const, l: "Lunedi - Venerdi", d: "Sabato conteggiato come straordinario" },
                 { v: "lun-sab" as const, l: "Lunedi - Sabato", d: "Eccedenze valutate su tutta la settimana" },
               ]).map((o) => (
                 <label key={o.v} style={{
-                  display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 10, cursor: settimanaSaving ? "wait" : "pointer",
                   padding: "14px 20px", borderRadius: "var(--r)", userSelect: "none",
                   border: cfg.settimana_lavorativa === o.v ? "2px solid var(--ac)" : "1.5px solid var(--bdr)",
                   background: cfg.settimana_lavorativa === o.v ? "var(--acl)" : "var(--bg)",
+                  opacity: settimanaSaving && cfg.settimana_lavorativa !== o.v ? .6 : 1,
                   transition: "all .15s", flex: 1,
                 }}>
                   <input type="radio" name="settimana_lavorativa" checked={cfg.settimana_lavorativa === o.v}
-                    onChange={() => set("settimana_lavorativa", o.v)} style={{ accentColor: "var(--ac)" }} />
+                    disabled={settimanaSaving}
+                    onChange={() => saveSettimanaLavorativa(o.v)} style={{ accentColor: "var(--ac)" }} />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: cfg.settimana_lavorativa === o.v ? 700 : 500, color: cfg.settimana_lavorativa === o.v ? "var(--ac)" : "var(--t)" }}>{o.l}</div>
                     <div style={{ fontSize: 11.5, color: "var(--tm)", marginTop: 2 }}>{o.d}</div>
                   </div>
                 </label>
               ))}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 20, fontSize: 12.5 }}>
+              {settimanaSaving ? (
+                <>
+                  <Loader2 size={13} style={{ animation: "sp 1s linear infinite", color: "var(--tm)" }} />
+                  <span style={{ color: "var(--tm)" }}>Salvataggio in corso…</span>
+                </>
+              ) : settimanaSaved ? (
+                <>
+                  <CheckCircle size={13} style={{ color: "var(--ok)" }} />
+                  <span style={{ color: "var(--ok)", fontWeight: 600 }}>Salvato — la scelta è registrata, puoi uscire dalla scheda</span>
+                </>
+              ) : cfg.settimana_lavorativa ? (
+                <span style={{ color: "var(--tm)" }}>Impostazione registrata: <strong>{cfg.settimana_lavorativa === "lun-sab" ? "Lunedi - Sabato" : "Lunedi - Venerdi"}</strong></span>
+              ) : (
+                <span style={{ color: "var(--tm)" }}>Nessuna opzione selezionata</span>
+              )}
             </div>
           </div>
 
