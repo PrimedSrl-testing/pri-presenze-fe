@@ -13,7 +13,7 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 | N. | Data | Da | Oggetto | Stato |
 |---|---|---|---|---|
 | PRES-001 | 2026-09-16 | Nunzia Convertini | Settimana lavorativa: i flag non salvavano | RISOLTA |
-| PRES-002 | 2026-09-16 | Nunzia Convertini | Contratto ciclico, tipologie contratto, conteggio 24/12 mesi | IN ATTESA (decisione Alberto) |
+| PRES-002 | 2026-09-16 | Nunzia Convertini | Contratto ciclico, tipologie contratto, conteggio 24/12 mesi | IN CORSO — tipologie fatte, resto in attesa (decisione Alberto) |
 
 ---
 
@@ -61,3 +61,11 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 **Conseguenza sul nodo 1:** la risposta di Nunzia indica il contratto ciclico come fonte autorevole delle ore settimanali. Resta da confermare con Alberto che `syncAnagraficaFromStorico` smetta di scrivere `ore_settimanali` per i dipendenti con ciclico attivo, altrimenti le due sorgenti continuano a sovrascriversi.
 
 **Prossimo passo (nodo 2, bloccante per il punto 4):** verificare i valori realmente presenti in `tipo_contratto` prima di attivare il filtro sui soli determinati. Comunicato a Nunzia nel thread il 2026-09-18.
+
+### Avanzamento
+
+**2026-09-22 — punto 3 CONSEGNATO** (commit `064512d`, deployato). Nello Storico Contratti il campo *Tipo contratto* non è più testo libero ma una tendina: *A tempo determinato*, *A tempo indeterminato*, *Tirocinio*, *Altro* (con richiamo a usare le note). Una tipologia già registrata a mano libera resta selezionabile come "(valore esistente)": senza questo accorgimento, riaprendo un contratto vecchio la sua tipologia verrebbe cambiata in silenzio al primo salvataggio. Il punto è indipendente dai due nodi aperti, quindi è stato fatto in autonomia.
+
+**2026-09-22 — sollecito.** Nunzia ha chiesto aggiornamenti alle 15:41; risposto nel thread con lo stato reale e il motivo dell'attesa. Inviati ad Alberto DM Slack ed email di sollecito sui due nodi ancora aperti.
+
+**Restano aperti:** punto 1 (contratto ciclico nel riquadro Programma + ore che seguono il periodo) e punto 4 (conteggio 24/12 mesi solo sui determinati).
