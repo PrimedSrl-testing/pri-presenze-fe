@@ -14,7 +14,7 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 |---|---|---|---|---|
 | PRES-001 | 2026-09-16 | Nunzia Convertini | Settimana lavorativa: i flag non salvavano | RISOLTA |
 | PRES-002 | 2026-09-16 | Nunzia Convertini | Contratto ciclico, tipologie contratto, conteggio 24/12 mesi | IN CORSO — tipologie fatte, punto 1 non si fa, punto 4 da normalizzare |
-| PRES-003 | 2026-09-22 | Nunzia Convertini | Trasformazione oraria dentro lo stesso contratto | APERTA — serve specifica, non implementata |
+| PRES-003 | 2026-09-22 | Nunzia Convertini | Trasformazione oraria dentro lo stesso contratto | IN ATTESA — requisito chiuso, serve decisione Alberto |
 
 ---
 
@@ -76,7 +76,7 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 
 ## PRES-003 — Trasformazione oraria dentro lo stesso contratto
 
-- **Aperta:** 2026-09-22 · **Stato:** APERTA — non implementata, serve una specifica
+- **Aperta:** 2026-09-22 · **Stato:** IN ATTESA — requisito chiuso da Nunzia il 2026-09-22, servono due decisioni di Alberto e una specifica scritta
 - **Segnalata da:** Nunzia Convertini · **Thread Slack:** `1790086790.997949`
 
 **Richiesta.** Poter registrare una *trasformazione oraria* all'interno dello stesso periodo contrattuale, senza chiudere il contratto in corso e aprirne uno nuovo. Il rapporto resta lo stesso, cambiano le condizioni orarie per un certo lasso di tempo. Esempi portati: part-time 36h su 6 giorni che passa temporaneamente a 40h su 5 giorni; indeterminato 40h ridotto a part-time per un periodo prestabilito; ciclico programmato a marzo anticipato a febbraio. Serve la cronologia delle variazioni con data di decorrenza e durata.
@@ -92,3 +92,20 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 **Chiarimenti chiesti a Nunzia (2026-09-22, nel thread):** se la variazione ha sempre una data di fine o può restare aperta; se alla scadenza si torna da soli all'orario precedente; se una decorrenza passata deve far rifare i conteggi. Segnalato inoltre che il terzo esempio (ciclico anticipato) è già possibile oggi modificando la data di avvio, e va trattato a parte.
 
 **Escalation ad Alberto:** DM Slack ed email inviati il 2026-09-22.
+
+**Risposte di Nunzia (2026-09-22 18:32) — requisito chiuso dal lato utente:**
+
+1. La variazione ha **sempre** una data di fine.
+2. Alla scadenza si **torna da soli** all'orario precedente.
+3. Una decorrenza passata fa **rifare** i conteggi già prodotti.
+4. Il ciclico anticipato è fuori scope: lo fa già cambiando le date (confermato da lei).
+
+**Conseguenza sull'architettura.** Le prime due semplificano: variazioni sempre chiuse e ritorno automatico ⇒ modello a intervalli, nessuno stato aperto. La terza esclude lo snapshot e impone un **risolutore per data** usato da ogni calcolo — oggi il codice risponde solo a "quale orario vale adesso".
+
+**Modello proposto** (una tabella nuova, `CFXX_HR_DIP_ORARIO` resta com'è):
+`CFXX_HR_ORARIO_VARIAZIONI (id, dip_id, data_inizio, data_fine, template_id, ore_settimanali NULL, note)`, sempre con entrambe le date.
+Risolutore `orarioAllaData(dip_id, data)`: variazione che copre la data → ciclico se attivo → base. Il ritorno automatico all'orario precedente non richiede scritture: scaduta la variazione, il risolutore ricade sul livello sottostante.
+
+**Decisioni ancora in capo ad Alberto:** precedenza variazione/ciclico (raccomandazione: variazione davanti, è un'eccezione esplicita) e ambito (se la variazione tocca anche il monte ore, si ritorna su `ore_settimanali`). Il costo non è la tabella ma il risolutore, da inserire in ogni punto che legge l'orario.
+
+**Comunicazioni:** risposta a Nunzia nel thread, DM Slack ed email ad Alberto il 2026-09-22.
