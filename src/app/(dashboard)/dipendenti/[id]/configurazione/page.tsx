@@ -53,6 +53,14 @@ const DEFICIT_OPT = [
   { key: "BOA", value: "boa" }, { key: "BOP", value: "bop" },
 ];
 
+/* ── Tipologie contratto (storico) ────────────────────────────────────────── */
+const TIPI_CONTRATTO = [
+  "A tempo determinato",
+  "A tempo indeterminato",
+  "Tirocinio",
+  "Altro",
+] as const;
+
 /* ── Defaults ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CFG: Omit<DipConfig, "id" | "dip_id"> = {
   codice_fiscale: null, email: null, telefono: null, regole_pausa: null,
@@ -807,7 +815,21 @@ export default function SchedaDipendentePage() {
                 <div className="g3">
                   <div><label className="lbl">Data inizio *</label><input className="fi" type="date" value={contrattoForm.data.data_inizio} onChange={(e) => setContrattoForm(f => ({ ...f, data: { ...f.data, data_inizio: e.target.value } }))} /></div>
                   <div><label className="lbl">Data fine</label><input className="fi" type="date" value={contrattoForm.data.data_fine} onChange={(e) => setContrattoForm(f => ({ ...f, data: { ...f.data, data_fine: e.target.value } }))} /></div>
-                  <div><label className="lbl">Tipo contratto</label><input className="fi" value={contrattoForm.data.tipo_contratto} onChange={(e) => setContrattoForm(f => ({ ...f, data: { ...f.data, tipo_contratto: e.target.value } }))} placeholder="Es. Determinato" /></div>
+                  <div>
+                    <label className="lbl">Tipo contratto</label>
+                    <select className="fi" value={contrattoForm.data.tipo_contratto} onChange={(e) => setContrattoForm(f => ({ ...f, data: { ...f.data, tipo_contratto: e.target.value } }))}>
+                      <option value="">— Seleziona —</option>
+                      {/* Un contratto gia' registrato puo' avere una tipologia scritta a mano libera:
+                          la si mantiene come opzione, altrimenti verrebbe cambiata in silenzio. */}
+                      {contrattoForm.data.tipo_contratto !== "" && !TIPI_CONTRATTO.includes(contrattoForm.data.tipo_contratto as typeof TIPI_CONTRATTO[number]) && (
+                        <option value={contrattoForm.data.tipo_contratto}>{contrattoForm.data.tipo_contratto} (valore esistente)</option>
+                      )}
+                      {TIPI_CONTRATTO.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    {contrattoForm.data.tipo_contratto === "Altro" && (
+                      <div style={{ fontSize: 11, color: "var(--tm)", marginTop: 4 }}>Specifica i dettagli nel campo Note qui sotto.</div>
+                    )}
+                  </div>
                 </div>
                 <div className="g3" style={{ marginTop: 10 }}>
                   <div><label className="lbl">Ore settimanali</label><input className="fi" type="number" min={0} max={48} step={0.5} value={contrattoForm.data.ore_settimanali} onChange={(e) => setContrattoForm(f => ({ ...f, data: { ...f.data, ore_settimanali: e.target.value } }))} /></div>
