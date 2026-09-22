@@ -13,7 +13,8 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 | N. | Data | Da | Oggetto | Stato |
 |---|---|---|---|---|
 | PRES-001 | 2026-09-16 | Nunzia Convertini | Settimana lavorativa: i flag non salvavano | RISOLTA |
-| PRES-002 | 2026-09-16 | Nunzia Convertini | Contratto ciclico, tipologie contratto, conteggio 24/12 mesi | IN CORSO — tipologie fatte, resto in attesa (decisione Alberto) |
+| PRES-002 | 2026-09-16 | Nunzia Convertini | Contratto ciclico, tipologie contratto, conteggio 24/12 mesi | IN CORSO — tipologie fatte, punto 1 non si fa, punto 4 da normalizzare |
+| PRES-003 | 2026-09-22 | Nunzia Convertini | Trasformazione oraria dentro lo stesso contratto | APERTA — serve specifica, non implementata |
 
 ---
 
@@ -69,3 +70,25 @@ Registro delle segnalazioni ricevute sul canale Slack `#proj-gestione-presenze` 
 **2026-09-22 — sollecito.** Nunzia ha chiesto aggiornamenti alle 15:41; risposto nel thread con lo stato reale e il motivo dell'attesa. Inviati ad Alberto DM Slack ed email di sollecito sui due nodi ancora aperti.
 
 **Restano aperti:** punto 1 (contratto ciclico nel riquadro Programma + ore che seguono il periodo) e punto 4 (conteggio 24/12 mesi solo sui determinati).
+
+
+---
+
+## PRES-003 — Trasformazione oraria dentro lo stesso contratto
+
+- **Aperta:** 2026-09-22 · **Stato:** APERTA — non implementata, serve una specifica
+- **Segnalata da:** Nunzia Convertini · **Thread Slack:** `1790086790.997949`
+
+**Richiesta.** Poter registrare una *trasformazione oraria* all'interno dello stesso periodo contrattuale, senza chiudere il contratto in corso e aprirne uno nuovo. Il rapporto resta lo stesso, cambiano le condizioni orarie per un certo lasso di tempo. Esempi portati: part-time 36h su 6 giorni che passa temporaneamente a 40h su 5 giorni; indeterminato 40h ridotto a part-time per un periodo prestabilito; ciclico programmato a marzo anticipato a febbraio. Serve la cronologia delle variazioni con data di decorrenza e durata.
+
+**Perché non è un campo in più.** `CFXX_HR_DIP_ORARIO` ha `CONSTRAINT UQ_DIP_ORARIO UNIQUE (dip_id)`: un solo orario per dipendente, e `data_inizio_ciclo` è l'ancora del ciclo, non un periodo di validità. Oggi cambiare orario sovrascrive il precedente e il passato sparisce. Serve un'assegnazione versionata (`valido_dal` / `valido_al`) più un risolutore "quale orario vale alla data X": oggi tutto il codice legge *l'orario del dipendente* sottintendendo **adesso**.
+
+**Nodi da decidere con Alberto:**
+
+1. *Storico o fotografia.* Una variazione con decorrenza passata fa rifare i conteggi già prodotti, o questi restano congelati? Determina l'architettura: risolutore per data ovunque, oppure snapshot sulle presenze.
+2. *Convivenza col contratto ciclico.* Il ciclico fa già un override del template per periodo (`api/dipendenti/[id]/orario/route.ts`, `getPeriodoAttivo`). Con le variazioni due meccanismi rispondono alla stessa domanda: o le variazioni assorbono il ciclico, o serve una precedenza esplicita.
+3. *Ambito.* Le variazioni cambiano solo l'articolazione settimanale o anche il monte ore contrattuale (36→40)? Nel secondo caso si torna su `ore_settimanali`.
+
+**Chiarimenti chiesti a Nunzia (2026-09-22, nel thread):** se la variazione ha sempre una data di fine o può restare aperta; se alla scadenza si torna da soli all'orario precedente; se una decorrenza passata deve far rifare i conteggi. Segnalato inoltre che il terzo esempio (ciclico anticipato) è già possibile oggi modificando la data di avvio, e va trattato a parte.
+
+**Escalation ad Alberto:** DM Slack ed email inviati il 2026-09-22.
